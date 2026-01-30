@@ -1,0 +1,117 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+}
+
+.container {
+    text-align: center;
+    padding: 20px;
+}
+
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    background: linear-gradient(90deg, #00d9ff, #00ff88);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.video-container {
+    position: relative;
+    display: inline-block;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 217, 255, 0.3);
+}
+
+#video {
+    display: block;
+    width: 640px;
+    height: 480px;
+    background: #000;
+    transform: scaleX(-1); /* Mirror the video */
+}
+
+#canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 640px;
+    height: 480px;
+    transform: scaleX(-1); /* Mirror to match video */
+    pointer-events: none;
+    z-index: 10;
+}
+
+.info-panel {
+    margin-top: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+}
+
+.finger-count {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px 40px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+}
+
+.finger-count .label {
+    font-size: 1.2rem;
+    color: #aaa;
+    margin-right: 10px;
+}
+
+.finger-count #count {
+    font-size: 3rem;
+    font-weight: bold;
+    background: linear-gradient(90deg, #00ff88, #00d9ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.status {
+    font-size: 1rem;
+    color: #888;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+}
+
+.status.ready {
+    color: #00ff88;
+}
+
+.status.error {
+    color: #ff6b6b;
+}
+
+@media (max-width: 700px) {
+    #video, #canvas {
+        width: 100%;
+        height: auto;
+    }
+    
+    h1 {
+        font-size: 1.8rem;
+    }
+    
+    .finger-count #count {
+        font-size: 2rem;
+    }
+}
