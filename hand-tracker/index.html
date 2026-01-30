@@ -8,13 +8,23 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #ffffff;
+            background: #000000;
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            color: #ffffff;
+        }
+        .main-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 40px;
+        }
+        .left-panel {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            color: #333;
         }
         .video-wrap {
             position: relative;
@@ -26,7 +36,7 @@
         }
         video {
             display: block;
-            transform: scaleX(-1);
+            transform: scaleX(-1); /* Mirror for natural selfie view */
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -37,7 +47,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            transform: scaleX(-1);
+            /* Canvas mirroring handled in JavaScript via coordinate transform */
         }
         #webgl-canvas {
             z-index: 10;
@@ -51,20 +61,20 @@
             padding: 10px 20px;
             border: none;
             border-radius: 8px;
-            background: #f0f0f0;
-            color: #333;
-            border: 1px solid #ddd;
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
             cursor: pointer;
             transition: all 0.2s;
         }
-        button:hover { background: #e0e0e0; }
+        button:hover { background: #333; }
         button.active { background: #4CAF50; color: white; border-color: #4CAF50; }
         #status {
             margin-top: 20px;
             padding: 10px 20px;
-            background: #f5f5f5;
+            background: #1a1a1a;
             border-radius: 8px;
-            color: #666;
+            color: #aaa;
             font-size: 14px;
         }
         .progress-container {
@@ -88,21 +98,412 @@
         .upload-section {
             display: none;
         }
+        
+        /* Settings Panel */
+        .settings-panel {
+            background: #111;
+            border-radius: 16px;
+            padding: 24px;
+            width: 280px;
+            max-height: 756px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        .settings-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        .settings-panel::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 3px;
+        }
+        .settings-panel::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+        .settings-panel::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .settings-panel h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .setting-group {
+            margin-bottom: 20px;
+        }
+        .setting-group label {
+            display: block;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+        .setting-group input[type="range"] {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .setting-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+            border: 2px solid #222;
+        }
+        .setting-group input[type="range"]::-webkit-slider-thumb:hover {
+            background: #66BB6A;
+        }
+        .setting-value {
+            font-size: 11px;
+            color: #666;
+            text-align: right;
+            margin-top: 4px;
+        }
+        .setting-group input[type="checkbox"] {
+            display: none;
+        }
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        .toggle-switch .toggle-track {
+            width: 40px;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            position: relative;
+            transition: background 0.2s;
+        }
+        .toggle-switch .toggle-thumb {
+            width: 16px;
+            height: 16px;
+            background: #666;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: all 0.2s;
+        }
+        .setting-group input[type="checkbox"]:checked + .toggle-switch .toggle-track {
+            background: #4CAF50;
+        }
+        .setting-group input[type="checkbox"]:checked + .toggle-switch .toggle-thumb {
+            left: 22px;
+            background: #fff;
+        }
+        .color-picker-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .color-picker-wrap input[type="color"] {
+            width: 40px;
+            height: 30px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+        }
+        .color-picker-wrap input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        .color-picker-wrap input[type="color"]::-webkit-color-swatch {
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+        .preset-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .preset-btn {
+            padding: 6px 12px;
+            font-size: 11px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #aaa;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover {
+            background: #333;
+            color: #fff;
+        }
+        .preset-btn.active {
+            background: #4CAF50;
+            border-color: #4CAF50;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
-    <div class="video-wrap">
-        <video id="video" width="378" height="756" autoplay playsinline muted></video>
-        <canvas id="canvas" width="378" height="756"></canvas>
-    </div>
-    <div class="controls">
-        <button id="toggleMesh" class="active">Mesh</button>
-        <button id="toggleMask">Mask</button>
-        <button id="toggleFaceSwap" style="display: none;">Face Swap</button>
-    </div>
-    <div id="status">Initializing...</div>
-    <div class="progress-container" id="progressContainer">
-        <div class="progress-bar" id="progressBar"></div>
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="video-wrap">
+                <video id="video" width="378" height="756" autoplay playsinline muted></video>
+                <canvas id="canvas" width="378" height="756"></canvas>
+            </div>
+            <div class="controls">
+                <button id="toggleMesh" class="active">Mesh</button>
+                <button id="toggleMask">Mask</button>
+                <button id="toggleFaceSwap" style="display: none;">Face Swap</button>
+            </div>
+            <div id="status">Initializing...</div>
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+        </div>
+        
+        <div class="settings-panel">
+            <h3>Mesh Settings</h3>
+            
+            <div class="setting-group">
+                <label>Line Width</label>
+                <input type="range" id="lineWidth" min="0.1" max="3" step="0.1" value="0.5">
+                <div class="setting-value" id="lineWidthValue">0.5</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Vertex Size</label>
+                <input type="range" id="vertexRadius" min="0" max="5" step="0.5" value="1.5">
+                <div class="setting-value" id="vertexRadiusValue">1.5</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Mesh Opacity</label>
+                <input type="range" id="meshOpacity" min="0" max="1" step="0.05" value="1">
+                <div class="setting-value" id="meshOpacityValue">100%</div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showVertices" checked>
+                <label class="toggle-switch" for="showVertices">
+                    <span>Show Vertices</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showContours" checked>
+                <label class="toggle-switch" for="showContours">
+                    <span>Show Contours</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="useDepth" checked>
+                <label class="toggle-switch" for="useDepth">
+                    <span>3D Depth Coloring</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showTriangles" checked>
+                <label class="toggle-switch" for="showTriangles">
+                    <span>Show Triangles</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <h3>Colors</h3>
+            
+            <div class="setting-group">
+                <label>Stroke Color (when depth off)</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="strokeColor" value="#00ffff">
+                    <span id="strokeColorValue">#00ffff</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Fill Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="fillColor" value="#ffffff">
+                    <span id="fillColorValue">#ffffff</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Fill Opacity</label>
+                <input type="range" id="fillOpacity" min="0" max="0.5" step="0.02" value="0.05">
+                <div class="setting-value" id="fillOpacityValue">5%</div>
+            </div>
+            
+            <h3>Contours</h3>
+            
+            <div class="setting-group">
+                <label>Contour Line Width</label>
+                <input type="range" id="contourWidth" min="0.5" max="4" step="0.5" value="1.5">
+                <div class="setting-value" id="contourWidthValue">1.5</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Contour Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="contourColor" value="#00ff88">
+                    <span id="contourColorValue">#00ff88</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showEyes" checked>
+                <label class="toggle-switch" for="showEyes">
+                    <span>Eyes</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showEyebrows" checked>
+                <label class="toggle-switch" for="showEyebrows">
+                    <span>Eyebrows</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showLips" checked>
+                <label class="toggle-switch" for="showLips">
+                    <span>Lips</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showNose" checked>
+                <label class="toggle-switch" for="showNose">
+                    <span>Nose</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showFaceOval" checked>
+                <label class="toggle-switch" for="showFaceOval">
+                    <span>Face Oval</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <h3>Effects</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showExpressions" checked>
+                <label class="toggle-switch" for="showExpressions">
+                    <span>Expression Effects</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showKeyPoints" checked>
+                <label class="toggle-switch" for="showKeyPoints">
+                    <span>Key Reference Points</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="pulseEffect">
+                <label class="toggle-switch" for="pulseEffect">
+                    <span>Pulse Animation</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Animation Speed</label>
+                <input type="range" id="animationSpeed" min="0.5" max="3" step="0.1" value="1">
+                <div class="setting-value" id="animationSpeedValue">1x</div>
+            </div>
+            
+            <h3>Video</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="mirrorVideo" checked>
+                <label class="toggle-switch" for="mirrorVideo">
+                    <span>Mirror Video</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showVideo" checked>
+                <label class="toggle-switch" for="showVideo">
+                    <span>Show Video</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Video Brightness</label>
+                <input type="range" id="videoBrightness" min="0.2" max="2" step="0.1" value="1">
+                <div class="setting-value" id="videoBrightnessValue">100%</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Video Contrast</label>
+                <input type="range" id="videoContrast" min="0.5" max="2" step="0.1" value="1">
+                <div class="setting-value" id="videoContrastValue">100%</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Video Saturation</label>
+                <input type="range" id="videoSaturation" min="0" max="2" step="0.1" value="1">
+                <div class="setting-value" id="videoSaturationValue">100%</div>
+            </div>
+            
+            <h3>Display</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showFPS">
+                <label class="toggle-switch" for="showFPS">
+                    <span>Show FPS</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showLandmarkIndices">
+                <label class="toggle-switch" for="showLandmarkIndices">
+                    <span>Show Landmark IDs</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Background Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="bgColor" value="#000000">
+                    <span id="bgColorValue">#000000</span>
+                </div>
+            </div>
+            
+            <h3>Presets</h3>
+            
+            <div class="preset-buttons">
+                <button class="preset-btn" id="presetWireframe">Wireframe</button>
+                <button class="preset-btn" id="presetDepth">3D Depth</button>
+                <button class="preset-btn" id="presetMinimal">Minimal</button>
+                <button class="preset-btn" id="presetNeon">Neon</button>
+                <button class="preset-btn" id="presetXray">X-Ray</button>
+                <button class="preset-btn" id="presetRetro">Retro</button>
+            </div>
+        </div>
     </div>
     
     <!-- Face Swap Upload Section (hidden for now) -->

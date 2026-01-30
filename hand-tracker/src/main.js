@@ -29,58 +29,181 @@ let faceTracker = null;
 let maskRenderer = null;  // 2D canvas renderer for mesh visualization
 let webglMaskRenderer = null;  // WebGL renderer for 3D mask wrapping
 
+// Mesh settings (controllable via UI)
+const meshSettings = {
+  // Mesh
+  lineWidth: 0.5,
+  vertexRadius: 1.5,
+  meshOpacity: 1,
+  showVertices: true,
+  showContours: true,
+  useDepth: true,
+  showTriangles: true,
+  strokeColor: '#00ffff',
+  fillColor: '#ffffff',
+  fillOpacity: 0.05,
+  // Contours
+  contourWidth: 1.5,
+  contourColor: '#00ff88',
+  showEyes: true,
+  showEyebrows: true,
+  showLips: true,
+  showNose: true,
+  showFaceOval: true,
+  // Effects
+  showExpressions: true,
+  showKeyPoints: true,
+  pulseEffect: false,
+  animationSpeed: 1,
+  // Video
+  mirrorVideo: true,
+  showVideo: true,
+  videoBrightness: 1,
+  videoContrast: 1,
+  videoSaturation: 1,
+  // Display
+  showFPS: false,
+  showLandmarkIndices: false,
+  bgColor: '#000000'
+};
+
+// Settings presets
+const presets = {
+  wireframe: {
+    lineWidth: 0.8,
+    vertexRadius: 0,
+    meshOpacity: 1,
+    showVertices: false,
+    showContours: true,
+    useDepth: false,
+    showTriangles: true,
+    strokeColor: '#00ffff',
+    fillColor: '#ffffff',
+    fillOpacity: 0,
+    contourWidth: 1.5,
+    contourColor: '#00ffff'
+  },
+  depth: {
+    lineWidth: 0.5,
+    vertexRadius: 1.5,
+    meshOpacity: 1,
+    showVertices: true,
+    showContours: true,
+    useDepth: true,
+    showTriangles: true,
+    strokeColor: '#00ffff',
+    fillColor: '#ffffff',
+    fillOpacity: 0.05,
+    contourWidth: 2,
+    contourColor: '#00ff88'
+  },
+  minimal: {
+    lineWidth: 0.3,
+    vertexRadius: 0,
+    meshOpacity: 0.6,
+    showVertices: false,
+    showContours: true,
+    useDepth: false,
+    showTriangles: false,
+    strokeColor: '#888888',
+    fillColor: '#ffffff',
+    fillOpacity: 0,
+    contourWidth: 1,
+    contourColor: '#666666'
+  },
+  neon: {
+    lineWidth: 1.5,
+    vertexRadius: 2,
+    meshOpacity: 1,
+    showVertices: true,
+    showContours: true,
+    useDepth: false,
+    showTriangles: true,
+    strokeColor: '#ff00ff',
+    fillColor: '#00ff00',
+    fillOpacity: 0.1,
+    contourWidth: 2.5,
+    contourColor: '#ff00ff'
+  },
+  xray: {
+    lineWidth: 0.3,
+    vertexRadius: 0.5,
+    meshOpacity: 0.8,
+    showVertices: true,
+    showContours: false,
+    useDepth: true,
+    showTriangles: true,
+    strokeColor: '#00ff00',
+    fillColor: '#00ff00',
+    fillOpacity: 0.02,
+    contourWidth: 1,
+    contourColor: '#00ff00',
+    showVideo: false,
+    bgColor: '#000000'
+  },
+  retro: {
+    lineWidth: 1,
+    vertexRadius: 0,
+    meshOpacity: 1,
+    showVertices: false,
+    showContours: true,
+    useDepth: false,
+    showTriangles: true,
+    strokeColor: '#00ff00',
+    fillColor: '#003300',
+    fillOpacity: 0.15,
+    contourWidth: 2,
+    contourColor: '#00ff00',
+    videoSaturation: 0,
+    videoContrast: 1.3
+  }
+};
+
 // Face swap components
 let textureExtractor = null;
 
 // Calculate transform for object-fit: cover
-// This tells us how video coordinates map to display coordinates
+// Video is 1920x1080 (landscape), display is 378x756 (portrait)
+// With cover, video height fills display, sides are cropped
 function calculateVideoTransform(videoWidth, videoHeight, displayWidth, displayHeight) {
-  const videoAspect = videoWidth / videoHeight;
-  const displayAspect = displayWidth / displayHeight;
+  const videoAspect = videoWidth / videoHeight;  // 1.78 (landscape)
+  const displayAspect = displayWidth / displayHeight;  // 0.5 (portrait)
   
-  let scale, offsetX, offsetY;
+  // Video is wider - scaled by height, sides cropped
+  // Scaled video width in display pixels
+  const scaledVideoWidth = displayHeight * videoAspect;  // 756 * 1.78 = 1345
   
-  if (videoAspect > displayAspect) {
-    // Video is wider than display - crop sides
-    scale = displayHeight / videoHeight;
-    const scaledWidth = videoWidth * scale;
-    offsetX = (scaledWidth - displayWidth) / 2 / scaledWidth;
-    offsetY = 0;
-  } else {
-    // Video is taller than display - crop top/bottom  
-    scale = displayWidth / videoWidth;
-    const scaledHeight = videoHeight * scale;
-    offsetX = 0;
-    offsetY = (scaledHeight - displayHeight) / 2 / scaledHeight;
-  }
+  // How much is cropped from each side (in video normalized coords)
+  const cropX = (scaledVideoWidth - displayWidth) / scaledVideoWidth / 2;  // 0.36
+  
+  // Visible portion of video X (normalized)
+  const visibleXStart = cropX;  // 0.36
+  const visibleXEnd = 1 - cropX;  // 0.64
+  const visibleXRange = visibleXEnd - visibleXStart;  // 0.28
   
   return {
     videoWidth, videoHeight,
     displayWidth, displayHeight,
-    videoAspect, displayAspect,
-    scale, offsetX, offsetY
+    visibleXStart,
+    visibleXRange
   };
 }
 
-// Transform normalized landmarks (0-1) from video space to display space
-function transformLandmarks(landmarks, transform) {
+// Transform landmarks with crop adjustment AND mirroring
+// SOLUTION 3: Handle mirroring in JavaScript instead of CSS
+function transformLandmarksSimple(landmarks, transform) {
   if (!transform) return landmarks;
   
-  const { videoAspect, displayAspect, offsetX, offsetY } = transform;
+  const { visibleXStart, visibleXRange } = transform;
   
   return landmarks.map(lm => {
-    let x = lm.x;
-    let y = lm.y;
+    // Map X from visible range to [0, 1]
+    let x = (lm.x - visibleXStart) / visibleXRange;
     
-    if (videoAspect > displayAspect) {
-      // Video is wider - x is cropped
-      const visibleWidth = displayAspect / videoAspect;
-      x = (lm.x - offsetX) / visibleWidth;
-    } else {
-      // Video is taller - y is cropped
-      const visibleHeight = videoAspect / displayAspect;
-      y = (lm.y - offsetY) / visibleHeight;
-    }
+    // Mirror X coordinate (replaces CSS scaleX(-1))
+    x = 1 - x;
+    
+    const y = lm.y;
     
     return { x, y, z: lm.z };
   });
@@ -91,6 +214,184 @@ let uploadedImages = [];  // Array of { file, img, processed: boolean }
 let faceSwapTexture = null;  // The final blended face texture
 let lastLiveFaceStats = null;  // Color stats from live video
 
+// Initialize settings UI controls
+function initSettingsControls() {
+  // Slider controls
+  const sliders = [
+    { id: 'lineWidth', key: 'lineWidth', format: v => v.toFixed(1) },
+    { id: 'vertexRadius', key: 'vertexRadius', format: v => v.toFixed(1) },
+    { id: 'meshOpacity', key: 'meshOpacity', format: v => Math.round(v * 100) + '%' },
+    { id: 'fillOpacity', key: 'fillOpacity', format: v => Math.round(v * 100) + '%' },
+    { id: 'contourWidth', key: 'contourWidth', format: v => v.toFixed(1) },
+    { id: 'animationSpeed', key: 'animationSpeed', format: v => v.toFixed(1) + 'x' },
+    { id: 'videoBrightness', key: 'videoBrightness', format: v => Math.round(v * 100) + '%' },
+    { id: 'videoContrast', key: 'videoContrast', format: v => Math.round(v * 100) + '%' },
+    { id: 'videoSaturation', key: 'videoSaturation', format: v => Math.round(v * 100) + '%' }
+  ];
+
+  sliders.forEach(({ id, key, format }) => {
+    const slider = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (slider) {
+      slider.value = meshSettings[key];
+      if (valueDisplay) valueDisplay.textContent = format(meshSettings[key]);
+      
+      slider.addEventListener('input', (e) => {
+        meshSettings[key] = parseFloat(e.target.value);
+        if (valueDisplay) valueDisplay.textContent = format(meshSettings[key]);
+        
+        // Apply video filters when changed
+        if (['videoBrightness', 'videoContrast', 'videoSaturation'].includes(key)) {
+          applyVideoFilters();
+        }
+      });
+    }
+  });
+
+  // Toggle controls
+  const toggles = [
+    'showVertices', 'showContours', 'useDepth', 'showTriangles',
+    'showEyes', 'showEyebrows', 'showLips', 'showNose', 'showFaceOval',
+    'showExpressions', 'showKeyPoints', 'pulseEffect',
+    'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
+  ];
+  
+  toggles.forEach(key => {
+    const toggle = document.getElementById(key);
+    if (toggle) {
+      toggle.checked = meshSettings[key];
+      toggle.addEventListener('change', (e) => {
+        meshSettings[key] = e.target.checked;
+        
+        // Apply special effects
+        if (key === 'mirrorVideo') {
+          video.style.transform = e.target.checked ? 'scaleX(-1)' : 'none';
+        }
+        if (key === 'showVideo') {
+          video.style.opacity = e.target.checked ? '1' : '0';
+        }
+      });
+    }
+  });
+
+  // Color pickers
+  const colors = [
+    { id: 'strokeColor', key: 'strokeColor' },
+    { id: 'fillColor', key: 'fillColor' },
+    { id: 'contourColor', key: 'contourColor' },
+    { id: 'bgColor', key: 'bgColor' }
+  ];
+
+  colors.forEach(({ id, key }) => {
+    const picker = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (picker) {
+      picker.value = meshSettings[key];
+      if (valueDisplay) valueDisplay.textContent = meshSettings[key];
+      
+      picker.addEventListener('input', (e) => {
+        meshSettings[key] = e.target.value;
+        if (valueDisplay) valueDisplay.textContent = e.target.value;
+        
+        // Apply background color
+        if (key === 'bgColor') {
+          document.body.style.background = e.target.value;
+        }
+      });
+    }
+  });
+
+  // Preset buttons
+  const presetButtons = {
+    'presetWireframe': 'wireframe',
+    'presetDepth': 'depth',
+    'presetMinimal': 'minimal',
+    'presetNeon': 'neon',
+    'presetXray': 'xray',
+    'presetRetro': 'retro'
+  };
+
+  Object.entries(presetButtons).forEach(([btnId, presetName]) => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        applyPreset(presetName);
+        // Update active state
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    }
+  });
+}
+
+// Apply video CSS filters
+function applyVideoFilters() {
+  const { videoBrightness, videoContrast, videoSaturation } = meshSettings;
+  video.style.filter = `brightness(${videoBrightness}) contrast(${videoContrast}) saturate(${videoSaturation})`;
+}
+
+// Apply a preset to settings and update UI
+function applyPreset(presetName) {
+  const preset = presets[presetName];
+  if (!preset) return;
+
+  // Update settings
+  Object.assign(meshSettings, preset);
+
+  // Update slider UIs
+  const sliderUpdates = [
+    { id: 'lineWidth', format: v => v.toFixed(1) },
+    { id: 'vertexRadius', format: v => v.toFixed(1) },
+    { id: 'meshOpacity', format: v => Math.round(v * 100) + '%' },
+    { id: 'fillOpacity', format: v => Math.round(v * 100) + '%' },
+    { id: 'contourWidth', format: v => v.toFixed(1) },
+    { id: 'animationSpeed', format: v => v.toFixed(1) + 'x' },
+    { id: 'videoBrightness', format: v => Math.round(v * 100) + '%' },
+    { id: 'videoContrast', format: v => Math.round(v * 100) + '%' },
+    { id: 'videoSaturation', format: v => Math.round(v * 100) + '%' }
+  ];
+
+  sliderUpdates.forEach(({ id, format }) => {
+    const slider = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (slider && meshSettings[id] !== undefined) {
+      slider.value = meshSettings[id];
+      if (valueDisplay) valueDisplay.textContent = format(meshSettings[id]);
+    }
+  });
+
+  // Update toggle UIs
+  const allToggles = [
+    'showVertices', 'showContours', 'useDepth', 'showTriangles',
+    'showEyes', 'showEyebrows', 'showLips', 'showNose', 'showFaceOval',
+    'showExpressions', 'showKeyPoints', 'pulseEffect',
+    'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
+  ];
+  
+  allToggles.forEach(key => {
+    const toggle = document.getElementById(key);
+    if (toggle && meshSettings[key] !== undefined) {
+      toggle.checked = meshSettings[key];
+    }
+  });
+
+  // Update color picker UIs
+  ['strokeColor', 'fillColor', 'contourColor', 'bgColor'].forEach(key => {
+    const picker = document.getElementById(key);
+    const valueDisplay = document.getElementById(key + 'Value');
+    if (picker && meshSettings[key]) {
+      picker.value = meshSettings[key];
+      if (valueDisplay) valueDisplay.textContent = meshSettings[key];
+    }
+  });
+  
+  // Apply video effects
+  applyVideoFilters();
+  video.style.opacity = meshSettings.showVideo ? '1' : '0';
+  video.style.transform = meshSettings.mirrorVideo ? 'scaleX(-1)' : 'none';
+  document.body.style.background = meshSettings.bgColor;
+}
+
 // Initialize the app
 async function init() {
   console.log('Starting initialization...');
@@ -99,11 +400,11 @@ async function init() {
   // Request camera FIRST - this is the most important step
   try {
     console.log('Calling getUserMedia...');
-    // Request highest quality from MacBook Pro webcam
+    // Request high quality from webcam
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { 
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
         facingMode: 'user' 
       }
     });
@@ -121,8 +422,7 @@ async function init() {
   }
 
   try {
-    // Set canvas size to match DISPLAY dimensions (not video dimensions)
-    // This is what the user sees after object-fit: cover crops the video
+    // SOLUTION 3: Canvas at display size, mirroring in JavaScript
     const displayWidth = 378;
     const displayHeight = 756;
     canvas.width = displayWidth;
@@ -130,7 +430,7 @@ async function init() {
     console.log('Canvas set to display size:', canvas.width, 'x', canvas.height);
     console.log('Video actual size:', video.videoWidth, 'x', video.videoHeight);
     
-    // Store video/display info for landmark transformation
+    // Calculate coordinate transformation for object-fit: cover
     window.videoTransform = calculateVideoTransform(
       video.videoWidth, video.videoHeight,
       displayWidth, displayHeight
@@ -162,7 +462,7 @@ async function init() {
     webglCanvas.style.position = 'absolute';
     webglCanvas.style.top = '0';
     webglCanvas.style.left = '0';
-    webglCanvas.style.transform = 'scaleX(-1)';
+    // No CSS mirroring - handled in JavaScript
     webglCanvas.style.pointerEvents = 'none';
     webglCanvas.style.zIndex = '20';
     
@@ -252,6 +552,9 @@ async function init() {
         }
       });
     }
+
+    // Initialize settings controls
+    initSettingsControls();
 
     // Initialize face swap components
     console.log('Creating face swap components...');
@@ -707,8 +1010,22 @@ function selectExtractionMethod(methodId, faceDataUrl) {
 // Current expressions state (for use by renderers)
 let currentExpressions = null;
 
+// FPS tracking
+let lastFrameTime = performance.now();
+let frameCount = 0;
+let currentFPS = 0;
+
 // Handle face detection results
 function onFaceResults(results) {
+  // Update FPS counter
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFrameTime >= 1000) {
+    currentFPS = frameCount;
+    frameCount = 0;
+    lastFrameTime = now;
+  }
+  
   // Clear both canvases
   maskRenderer.clear();
   if (webglMaskRenderer) {
@@ -716,9 +1033,9 @@ function onFaceResults(results) {
   }
 
   if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-    // Transform landmarks from video space to display space (for object-fit: cover)
+    // SOLUTION 3: Transform landmarks with crop adjustment AND mirroring in JS
     const rawLandmarks = results.multiFaceLandmarks[0];
-    const landmarks = transformLandmarks(rawLandmarks, window.videoTransform);
+    const landmarks = transformLandmarksSimple(rawLandmarks, window.videoTransform);
     
     // Store expressions for use by renderers
     currentExpressions = results.expressions;
@@ -728,12 +1045,53 @@ function onFaceResults(results) {
 
     // Draw mesh visualization (2D canvas)
     if (showMesh && !faceSwapMode) {
-      maskRenderer.drawMesh(landmarks, canvas.width, canvas.height);
-      maskRenderer.drawKeyPoints(transform);
+      // Draw triangle mesh with 3D depth visualization
+      // Apply global opacity
+      maskRenderer.ctx.globalAlpha = meshSettings.meshOpacity;
+      
+      // Apply pulse effect if enabled
+      let pulseScale = 1;
+      if (meshSettings.pulseEffect) {
+        const time = performance.now() * 0.001 * meshSettings.animationSpeed;
+        pulseScale = 1 + Math.sin(time * 3) * 0.02;
+      }
+      
+      maskRenderer.drawTriangleMesh(landmarks, canvas.width, canvas.height, {
+        lineWidth: meshSettings.lineWidth * pulseScale,
+        showVertices: meshSettings.showVertices,
+        vertexRadius: meshSettings.vertexRadius * pulseScale,
+        useDepth: meshSettings.useDepth,
+        showContours: meshSettings.showContours,
+        showTriangles: meshSettings.showTriangles,
+        strokeColor: meshSettings.strokeColor,
+        fillColor: meshSettings.fillColor,
+        fillOpacity: meshSettings.fillOpacity,
+        // Contour settings
+        contourWidth: meshSettings.contourWidth,
+        contourColor: meshSettings.contourColor,
+        showEyes: meshSettings.showEyes,
+        showEyebrows: meshSettings.showEyebrows,
+        showLips: meshSettings.showLips,
+        showNose: meshSettings.showNose,
+        showFaceOval: meshSettings.showFaceOval
+      });
+      
+      // Reset opacity
+      maskRenderer.ctx.globalAlpha = 1;
+      
+      // Draw key reference points
+      if (meshSettings.showKeyPoints) {
+        maskRenderer.drawKeyPoints(transform);
+      }
       
       // Draw expression-reactive effects
-      if (results.expressions) {
+      if (meshSettings.showExpressions && results.expressions) {
         maskRenderer.drawExpressionEffects(landmarks, canvas.width, canvas.height, results.expressions);
+      }
+      
+      // Draw landmark indices if enabled
+      if (meshSettings.showLandmarkIndices) {
+        maskRenderer.drawLandmarkIndices(landmarks, canvas.width, canvas.height);
       }
     }
 
@@ -758,11 +1116,22 @@ function onFaceResults(results) {
     else {
       // Build expression status string
       const expressionText = buildExpressionStatus(results.expressions);
-      status.textContent = `Tracking face (${landmarks.length} landmarks)${expressionText}`;
+      const fpsText = meshSettings.showFPS ? ` | ${currentFPS} FPS` : '';
+      status.textContent = `Tracking face (${landmarks.length} landmarks)${expressionText}${fpsText}`;
+    }
+    
+    // Draw FPS overlay if enabled
+    if (meshSettings.showFPS) {
+      maskRenderer.drawFPS(currentFPS);
     }
   } else {
-    status.textContent = 'No face detected';
+    const fpsText = meshSettings.showFPS ? ` | ${currentFPS} FPS` : '';
+    status.textContent = `No face detected${fpsText}`;
     currentExpressions = null;
+    
+    if (meshSettings.showFPS) {
+      maskRenderer.drawFPS(currentFPS);
+    }
   }
 }
 
