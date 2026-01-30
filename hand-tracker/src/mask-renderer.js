@@ -262,4 +262,118 @@ export class MaskRenderer {
     this.ctx.lineTo(center.x, center.y + 10);
     this.ctx.stroke();
   }
+
+  // Draw expression-reactive effects
+  drawExpressionEffects(landmarks, canvasWidth, canvasHeight, expressions) {
+    if (!landmarks || !expressions) return;
+
+    const toPixel = (idx) => ({
+      x: landmarks[idx].x * canvasWidth,
+      y: landmarks[idx].y * canvasHeight
+    });
+
+    this.ctx.save();
+
+    // Smile effect - draw sparkles near mouth corners when smiling
+    if (expressions.smileAmount > 0.3) {
+      const leftMouthCorner = toPixel(61);
+      const rightMouthCorner = toPixel(291);
+      const intensity = expressions.smileAmount;
+      
+      this.ctx.fillStyle = `rgba(255, 215, 0, ${intensity * 0.8})`;
+      
+      // Draw sparkles
+      for (const corner of [leftMouthCorner, rightMouthCorner]) {
+        const sparkleSize = 4 + intensity * 6;
+        this.drawSparkle(corner.x + (corner === leftMouthCorner ? -15 : 15), corner.y - 10, sparkleSize);
+      }
+    }
+
+    // Mouth open effect - draw "aura" inside mouth
+    if (expressions.mouthOpenAmount > 0.4) {
+      const mouthCenter = toPixel(13); // Inner lip top center
+      const mouthBottom = toPixel(14); // Inner lip bottom center
+      const openAmount = expressions.mouthOpenAmount;
+      
+      const mouthOpenSize = Math.abs(mouthBottom.y - mouthCenter.y);
+      
+      // Draw gradient inside mouth
+      const gradient = this.ctx.createRadialGradient(
+        mouthCenter.x, (mouthCenter.y + mouthBottom.y) / 2, 0,
+        mouthCenter.x, (mouthCenter.y + mouthBottom.y) / 2, mouthOpenSize * 2
+      );
+      gradient.addColorStop(0, `rgba(255, 100, 50, ${openAmount * 0.6})`);
+      gradient.addColorStop(0.5, `rgba(255, 50, 0, ${openAmount * 0.3})`);
+      gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+      
+      this.ctx.fillStyle = gradient;
+      this.ctx.beginPath();
+      this.ctx.ellipse(
+        mouthCenter.x, 
+        (mouthCenter.y + mouthBottom.y) / 2, 
+        mouthOpenSize * 1.5, 
+        mouthOpenSize, 
+        0, 0, Math.PI * 2
+      );
+      this.ctx.fill();
+    }
+
+    // Brow raise effect - draw emphasis lines above eyebrows
+    if (expressions.browRaiseAmount > 0.3) {
+      const leftBrow = toPixel(70);  // Left eyebrow
+      const rightBrow = toPixel(300); // Right eyebrow
+      const intensity = expressions.browRaiseAmount;
+      
+      this.ctx.strokeStyle = `rgba(0, 200, 255, ${intensity * 0.6})`;
+      this.ctx.lineWidth = 2;
+      this.ctx.lineCap = 'round';
+      
+      for (const brow of [leftBrow, rightBrow]) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(brow.x - 20, brow.y - 15 - intensity * 10);
+        this.ctx.lineTo(brow.x + 20, brow.y - 15 - intensity * 10);
+        this.ctx.stroke();
+      }
+    }
+
+    // Eye closed effect - draw "Z" for sleeping
+    if (expressions.bothEyesClosed) {
+      const forehead = toPixel(10);
+      
+      this.ctx.font = 'bold 24px sans-serif';
+      this.ctx.fillStyle = 'rgba(100, 150, 255, 0.8)';
+      this.ctx.fillText('z', forehead.x + 30, forehead.y - 20);
+      this.ctx.font = 'bold 18px sans-serif';
+      this.ctx.fillText('z', forehead.x + 50, forehead.y - 35);
+      this.ctx.font = 'bold 14px sans-serif';
+      this.ctx.fillText('z', forehead.x + 65, forehead.y - 45);
+    }
+
+    this.ctx.restore();
+  }
+
+  // Helper to draw a sparkle/star shape
+  drawSparkle(x, y, size) {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    
+    this.ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const angle = (i * Math.PI) / 2;
+      const innerAngle = angle + Math.PI / 4;
+      
+      this.ctx.lineTo(
+        Math.cos(angle) * size,
+        Math.sin(angle) * size
+      );
+      this.ctx.lineTo(
+        Math.cos(innerAngle) * size * 0.4,
+        Math.sin(innerAngle) * size * 0.4
+      );
+    }
+    this.ctx.closePath();
+    this.ctx.fill();
+    
+    this.ctx.restore();
+  }
 }

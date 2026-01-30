@@ -31,15 +31,15 @@ h1 {
 .video-container {
     position: relative;
     display: inline-block;
-    border-radius: 16px;
+    border-radius: 44px;
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0, 217, 255, 0.3);
 }
 
 #video {
     display: block;
-    width: 640px;
-    height: 480px;
+    width: 700px;
+    height: 525px;
     background: #000;
     transform: scaleX(-1); /* Mirror the video */
 }
@@ -48,8 +48,8 @@ h1 {
     position: absolute;
     top: 0;
     left: 0;
-    width: 640px;
-    height: 480px;
+    width: 700px;
+    height: 525px;
     transform: scaleX(-1); /* Mirror to match video */
     pointer-events: none;
     z-index: 10;

@@ -31,6 +31,60 @@ let webglMaskRenderer = null;  // WebGL renderer for 3D mask wrapping
 
 // Face swap components
 let textureExtractor = null;
+
+// Calculate transform for object-fit: cover
+// This tells us how video coordinates map to display coordinates
+function calculateVideoTransform(videoWidth, videoHeight, displayWidth, displayHeight) {
+  const videoAspect = videoWidth / videoHeight;
+  const displayAspect = displayWidth / displayHeight;
+  
+  let scale, offsetX, offsetY;
+  
+  if (videoAspect > displayAspect) {
+    // Video is wider than display - crop sides
+    scale = displayHeight / videoHeight;
+    const scaledWidth = videoWidth * scale;
+    offsetX = (scaledWidth - displayWidth) / 2 / scaledWidth;
+    offsetY = 0;
+  } else {
+    // Video is taller than display - crop top/bottom  
+    scale = displayWidth / videoWidth;
+    const scaledHeight = videoHeight * scale;
+    offsetX = 0;
+    offsetY = (scaledHeight - displayHeight) / 2 / scaledHeight;
+  }
+  
+  return {
+    videoWidth, videoHeight,
+    displayWidth, displayHeight,
+    videoAspect, displayAspect,
+    scale, offsetX, offsetY
+  };
+}
+
+// Transform normalized landmarks (0-1) from video space to display space
+function transformLandmarks(landmarks, transform) {
+  if (!transform) return landmarks;
+  
+  const { videoAspect, displayAspect, offsetX, offsetY } = transform;
+  
+  return landmarks.map(lm => {
+    let x = lm.x;
+    let y = lm.y;
+    
+    if (videoAspect > displayAspect) {
+      // Video is wider - x is cropped
+      const visibleWidth = displayAspect / videoAspect;
+      x = (lm.x - offsetX) / visibleWidth;
+    } else {
+      // Video is taller - y is cropped
+      const visibleHeight = videoAspect / displayAspect;
+      y = (lm.y - offsetY) / visibleHeight;
+    }
+    
+    return { x, y, z: lm.z };
+  });
+}
 let textureBlender = null;
 let colorMatcher = null;
 let uploadedImages = [];  // Array of { file, img, processed: boolean }
@@ -45,13 +99,19 @@ async function init() {
   // Request camera FIRST - this is the most important step
   try {
     console.log('Calling getUserMedia...');
+    // Request highest quality from MacBook Pro webcam
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 360, height: 640, facingMode: 'user' }
+      video: { 
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        facingMode: 'user' 
+      }
     });
     console.log('Got camera stream:', stream);
     video.srcObject = stream;
     await video.play();
     console.log('Camera playing');
+    console.log('Video actual size:', video.videoWidth, 'x', video.videoHeight);
     status.textContent = 'Camera active!';
   } catch (camError) {
     console.error('Camera error:', camError);
@@ -61,9 +121,21 @@ async function init() {
   }
 
   try {
-    // Set canvas size (9:16 ratio)
-    canvas.width = 360;
-    canvas.height = 640;
+    // Set canvas size to match DISPLAY dimensions (not video dimensions)
+    // This is what the user sees after object-fit: cover crops the video
+    const displayWidth = 378;
+    const displayHeight = 756;
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+    console.log('Canvas set to display size:', canvas.width, 'x', canvas.height);
+    console.log('Video actual size:', video.videoWidth, 'x', video.videoHeight);
+    
+    // Store video/display info for landmark transformation
+    window.videoTransform = calculateVideoTransform(
+      video.videoWidth, video.videoHeight,
+      displayWidth, displayHeight
+    );
+    console.log('Video transform:', window.videoTransform);
 
     // Create 2D mask renderer for mesh visualization
     maskRenderer = new MaskRenderer(canvas);
@@ -84,8 +156,8 @@ async function init() {
     
     const webglCanvas = document.createElement('canvas');
     webglCanvas.id = 'webgl-canvas';
-    webglCanvas.width = 360;
-    webglCanvas.height = 640;
+    webglCanvas.width = displayWidth;
+    webglCanvas.height = displayHeight;
     // Use same styling as the 2D canvas
     webglCanvas.style.position = 'absolute';
     webglCanvas.style.top = '0';
@@ -115,16 +187,45 @@ async function init() {
       webglMaskRenderer = null;
     }
 
-    // Create face tracker
-    status.textContent = 'Loading face mesh model...';
+    // Create face tracker with progress callback
+    status.textContent = 'Loading Face Landmarker...';
     console.log('Creating face tracker...');
-    faceTracker = new FaceTracker(video, onFaceResults);
+    
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    
+    // Progress callback to update UI
+    const onProgress = (percent, stage) => {
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (progressBar) progressBar.style.width = percent + '%';
+      
+      const stageNames = {
+        'init': 'Initializing...',
+        'wasm': 'Loading WASM runtime...',
+        'model': `Downloading model... ${percent}%`,
+        'create': 'Creating detector...',
+        'done': 'Ready!'
+      };
+      status.textContent = stageNames[stage] || `Loading... ${percent}%`;
+    };
+    
+    faceTracker = new FaceTracker(video, onFaceResults, onProgress);
 
-    await faceTracker.initialize();
-    console.log('Face tracker initialized');
-
-    status.textContent = 'Ready! 468 landmarks active';
-    status.style.color = '#00ff88';
+    try {
+      await faceTracker.initialize();
+      console.log('Face tracker initialized');
+      
+      // Hide progress bar and show ready message
+      if (progressContainer) progressContainer.style.display = 'none';
+      status.textContent = 'Ready! 478 landmarks + 52 expressions';
+      status.style.color = '#00ff88';
+    } catch (initError) {
+      if (progressContainer) progressContainer.style.display = 'none';
+      console.error('Face tracker init failed:', initError);
+      status.textContent = 'Error: ' + initError.message;
+      status.style.color = '#ff6b6b';
+      return;
+    }
 
     // Set up toggle buttons
     if (toggleMeshBtn) {
@@ -603,6 +704,9 @@ function selectExtractionMethod(methodId, faceDataUrl) {
   img.src = faceDataUrl;
 }
 
+// Current expressions state (for use by renderers)
+let currentExpressions = null;
+
 // Handle face detection results
 function onFaceResults(results) {
   // Clear both canvases
@@ -612,7 +716,12 @@ function onFaceResults(results) {
   }
 
   if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-    const landmarks = results.multiFaceLandmarks[0];
+    // Transform landmarks from video space to display space (for object-fit: cover)
+    const rawLandmarks = results.multiFaceLandmarks[0];
+    const landmarks = transformLandmarks(rawLandmarks, window.videoTransform);
+    
+    // Store expressions for use by renderers
+    currentExpressions = results.expressions;
 
     // Get face transform for 2D operations
     const transform = getFaceTransform(landmarks, canvas.width, canvas.height);
@@ -621,6 +730,11 @@ function onFaceResults(results) {
     if (showMesh && !faceSwapMode) {
       maskRenderer.drawMesh(landmarks, canvas.width, canvas.height);
       maskRenderer.drawKeyPoints(transform);
+      
+      // Draw expression-reactive effects
+      if (results.expressions) {
+        maskRenderer.drawExpressionEffects(landmarks, canvas.width, canvas.height, results.expressions);
+      }
     }
 
     // Face swap mode - use extracted face texture
@@ -642,11 +756,34 @@ function onFaceResults(results) {
       status.textContent = `Tracking face (${landmarks.length} landmarks)`;
     }
     else {
-      status.textContent = `Tracking face (${landmarks.length} landmarks)`;
+      // Build expression status string
+      const expressionText = buildExpressionStatus(results.expressions);
+      status.textContent = `Tracking face (${landmarks.length} landmarks)${expressionText}`;
     }
   } else {
     status.textContent = 'No face detected';
+    currentExpressions = null;
   }
+}
+
+// Build a status string showing detected expressions
+function buildExpressionStatus(expressions) {
+  if (!expressions) return '';
+  
+  const detected = [];
+  
+  if (expressions.smiling) detected.push('😊');
+  if (expressions.mouthOpen) detected.push('😮');
+  if (expressions.bothEyesClosed) detected.push('😑');
+  else if (expressions.leftEyeClosed || expressions.rightEyeClosed) detected.push('😉');
+  if (expressions.surprised) detected.push('😲');
+  if (expressions.cheeksPuffed) detected.push('🐡');
+  if (expressions.mouthPucker) detected.push('😗');
+  
+  if (detected.length > 0) {
+    return ' ' + detected.join('');
+  }
+  return '';
 }
 
 // Draw a simple 2D face mask using canvas

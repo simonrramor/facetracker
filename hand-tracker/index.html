@@ -18,18 +18,25 @@
         }
         .video-wrap {
             position: relative;
-            border-radius: 8px;
+            width: 378px;
+            height: 756px;
+            border-radius: 44px;
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
         video {
             display: block;
             transform: scaleX(-1);
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         .video-wrap canvas {
             position: absolute;
             top: 0;
             left: 0;
+            width: 100%;
+            height: 100%;
             transform: scaleX(-1);
         }
         #webgl-canvas {
@@ -60,6 +67,22 @@
             color: #666;
             font-size: 14px;
         }
+        .progress-container {
+            width: 200px;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.2s ease;
+        }
         
         /* Hidden upload section */
         .upload-section {
@@ -69,8 +92,8 @@
 </head>
 <body>
     <div class="video-wrap">
-        <video id="video" width="360" height="640" autoplay playsinline muted></video>
-        <canvas id="canvas" width="360" height="640"></canvas>
+        <video id="video" width="378" height="756" autoplay playsinline muted></video>
+        <canvas id="canvas" width="378" height="756"></canvas>
     </div>
     <div class="controls">
         <button id="toggleMesh" class="active">Mesh</button>
@@ -78,6 +101,9 @@
         <button id="toggleFaceSwap" style="display: none;">Face Swap</button>
     </div>
     <div id="status">Initializing...</div>
+    <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
     
     <!-- Face Swap Upload Section (hidden for now) -->
     <div class="upload-section">
@@ -103,8 +129,21 @@
         </div>
     </div>
 
-    <!-- MediaPipe FaceMesh from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script>
+      // Load MediaPipe tasks-vision via dynamic ES module import
+      window.waitForVisionAPI = (async function() {
+        try {
+          const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+          return {
+            FilesetResolver: vision.FilesetResolver,
+            FaceLandmarker: vision.FaceLandmarker
+          };
+        } catch (err) {
+          console.error('Failed to load MediaPipe Vision:', err);
+          throw err;
+        }
+      })();
+    </script>
     
     <script type="module" src="/src/main.js"></script>
 </body>
