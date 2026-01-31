@@ -28,9 +28,9 @@
         }
         .video-wrap {
             position: relative;
-            width: 378px;
-            height: 756px;
-            border-radius: 44px;
+            width: 960px;
+            height: 540px;
+            border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
@@ -39,7 +39,6 @@
             transform: scaleX(-1); /* Mirror for natural selfie view */
             width: 100%;
             height: 100%;
-            object-fit: cover;
         }
         .video-wrap canvas {
             position: absolute;
@@ -69,6 +68,31 @@
         }
         button:hover { background: #333; }
         button.active { background: #4CAF50; color: white; border-color: #4CAF50; }
+        .record-btn { background: #333; }
+        .record-btn::before {
+            content: '';
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #ff4444;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .record-btn.recording {
+            background: #ff4444;
+            border-color: #ff4444;
+            animation: pulse-record 1s infinite;
+        }
+        .record-btn.recording::before {
+            background: #fff;
+            border-radius: 2px;
+            width: 8px;
+            height: 8px;
+        }
+        @keyframes pulse-record {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
         #status {
             margin-top: 20px;
             padding: 10px 20px;
@@ -105,7 +129,7 @@
             border-radius: 16px;
             padding: 24px;
             width: 280px;
-            max-height: 756px;
+            max-height: 540px;
             overflow-y: auto;
             border: 1px solid #333;
         }
@@ -246,6 +270,23 @@
             border-color: #4CAF50;
             color: #fff;
         }
+        .setting-select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            outline: none;
+        }
+        .setting-select:hover {
+            border-color: #666;
+        }
+        .setting-select:focus {
+            border-color: #4CAF50;
+        }
     </style>
 </head>
 <body>
@@ -259,6 +300,11 @@
                 <button id="toggleMesh" class="active">Mesh</button>
                 <button id="toggleMask">Mask</button>
                 <button id="toggleFaceSwap" style="display: none;">Face Swap</button>
+                <button id="recordBtn" class="record-btn">Record</button>
+            </div>
+            <div class="controls" style="margin-top: 10px;">
+                <button id="toggleConnectionMode">Connect Points</button>
+                <button id="clearConnections">Clear Connections</button>
             </div>
             <div id="status">Initializing...</div>
             <div class="progress-container" id="progressContainer">
@@ -315,6 +361,54 @@
                 <input type="checkbox" id="showTriangles" checked>
                 <label class="toggle-switch" for="showTriangles">
                     <span>Show Triangles</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <h3>Adaptive LOD</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="useAdaptiveLOD">
+                <label class="toggle-switch" for="useAdaptiveLOD">
+                    <span>Enable Adaptive Mesh</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="enableDenseLandmarks" checked>
+                <label class="toggle-switch" for="enableDenseLandmarks">
+                    <span>Dense Landmarks (700+)</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="enableSubdivision" checked>
+                <label class="toggle-switch" for="enableSubdivision">
+                    <span>Subdivide Flat Regions</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>LOD Level (Detail)</label>
+                <input type="range" id="lodLevel" min="0" max="1" step="0.1" value="1">
+                <div class="setting-value" id="lodLevelValue">100%</div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="enableSymmetry" checked>
+                <label class="toggle-switch" for="enableSymmetry">
+                    <span>Enforce Symmetry</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showRegionColors">
+                <label class="toggle-switch" for="showRegionColors">
+                    <span>Show Region Colors</span>
                     <div class="toggle-track"><div class="toggle-thumb"></div></div>
                 </label>
             </div>
@@ -402,11 +496,101 @@
             <h3>Effects</h3>
             
             <div class="setting-group">
-                <input type="checkbox" id="showExpressions" checked>
-                <label class="toggle-switch" for="showExpressions">
-                    <span>Expression Effects</span>
+                <input type="checkbox" id="showIrisTracking" checked>
+                <label class="toggle-switch" for="showIrisTracking">
+                    <span>Iris Tracking</span>
                     <div class="toggle-track"><div class="toggle-thumb"></div></div>
                 </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showGazeDirection" checked>
+                <label class="toggle-switch" for="showGazeDirection">
+                    <span>Gaze Direction</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showExpressions" checked>
+                <label class="toggle-switch" for="showExpressions">
+                    <span>Expression Labels</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <h3>Hand Tracking</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="enableHandTracking" checked>
+                <label class="toggle-switch" for="enableHandTracking">
+                    <span>Enable Hand Tracking</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showHandConnections" checked>
+                <label class="toggle-switch" for="showHandConnections">
+                    <span>Show Skeleton</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showHandLandmarks" checked>
+                <label class="toggle-switch" for="showHandLandmarks">
+                    <span>Show Landmarks</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showHandGestures" checked>
+                <label class="toggle-switch" for="showHandGestures">
+                    <span>Show Gestures</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showHandLabels" checked>
+                <label class="toggle-switch" for="showHandLabels">
+                    <span>Show Labels</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <h3>Mood Detection</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showMoodDetection" checked>
+                <label class="toggle-switch" for="showMoodDetection">
+                    <span>Show Mood</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showEmotionWheel" checked>
+                <label class="toggle-switch" for="showEmotionWheel">
+                    <span>Emotion Wheel</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="showEmotionBars">
+                <label class="toggle-switch" for="showEmotionBars">
+                    <span>Emotion Bars</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Mood Smoothing</label>
+                <input type="range" id="moodSmoothing" min="0" max="1" step="0.1" value="0.3">
+                <div class="setting-value" id="moodSmoothingValue">30%</div>
             </div>
             
             <div class="setting-group">
@@ -491,6 +675,226 @@
                     <input type="color" id="bgColor" value="#000000">
                     <span id="bgColorValue">#000000</span>
                 </div>
+            </div>
+            
+            <h3>Mask Designer</h3>
+            
+            <div class="setting-group">
+                <label>Mask Shape</label>
+                <div class="preset-buttons">
+                    <button class="preset-btn mask-preset-btn" id="maskClassic">Classic</button>
+                    <button class="preset-btn mask-preset-btn" id="maskAngular">Angular</button>
+                    <button class="preset-btn mask-preset-btn" id="maskMasquerade">Masquerade</button>
+                    <button class="preset-btn mask-preset-btn" id="maskNinja">Ninja</button>
+                    <button class="preset-btn mask-preset-btn" id="maskPhantom">Phantom</button>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Primary Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="maskPrimaryColor" value="#1a1a2e">
+                    <span id="maskPrimaryColorValue">#1a1a2e</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Secondary Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="maskSecondaryColor" value="#16213e">
+                    <span id="maskSecondaryColorValue">#16213e</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Border Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="maskBorderColor" value="#e94560">
+                    <span id="maskBorderColorValue">#e94560</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="maskUseGradient" checked>
+                <label class="toggle-switch" for="maskUseGradient">
+                    <span>Use Gradient</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Border Width</label>
+                <input type="range" id="maskBorderWidth" min="0" max="10" step="0.5" value="3">
+                <div class="setting-value" id="maskBorderWidthValue">3</div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="maskBorderGlow" checked>
+                <label class="toggle-switch" for="maskBorderGlow">
+                    <span>Border Glow</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Glow Intensity</label>
+                <input type="range" id="maskGlowIntensity" min="0" max="1" step="0.1" value="0.5">
+                <div class="setting-value" id="maskGlowIntensityValue">50%</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Eye Hole Size</label>
+                <input type="range" id="maskEyeHoleSize" min="0.5" max="1.5" step="0.1" value="1">
+                <div class="setting-value" id="maskEyeHoleSizeValue">1.0x</div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="maskEyeHoleBorder" checked>
+                <label class="toggle-switch" for="maskEyeHoleBorder">
+                    <span>Eye Hole Border</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Mask Opacity</label>
+                <input type="range" id="maskOpacity" min="0.5" max="1" step="0.05" value="0.95">
+                <div class="setting-value" id="maskOpacityValue">95%</div>
+            </div>
+            
+            <h3>Accessories</h3>
+            
+            <div class="setting-group">
+                <label>Accessory Type</label>
+                <select id="accessoryType" class="setting-select">
+                    <option value="none">None</option>
+                    <option value="sunglasses">Sunglasses</option>
+                    <option value="aviators">Aviators</option>
+                    <option value="hearts">Heart Glasses</option>
+                    <option value="stars">Star Glasses</option>
+                    <option value="crown">Crown</option>
+                    <option value="cat_ears">Cat Ears</option>
+                    <option value="dog_ears">Dog Ears</option>
+                    <option value="hat">Top Hat</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <label>Accessory Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="accessoryColor" value="#000000">
+                    <span id="accessoryColorValue">#000000</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Accessory Scale</label>
+                <input type="range" id="accessoryScale" min="0.5" max="1.5" step="0.1" value="1">
+                <div class="setting-value" id="accessoryScaleValue">1.0x</div>
+            </div>
+            
+            <h3>Makeup</h3>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="lipstickEnabled">
+                <label class="toggle-switch" for="lipstickEnabled">
+                    <span>Lipstick</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Lipstick Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="lipstickColor" value="#cc2244">
+                    <span id="lipstickColorValue">#cc2244</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="eyelinerEnabled">
+                <label class="toggle-switch" for="eyelinerEnabled">
+                    <span>Eyeliner</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Eyeliner Style</label>
+                <select id="eyelinerStyle" class="setting-select">
+                    <option value="classic">Classic</option>
+                    <option value="wing">Winged</option>
+                    <option value="smoky">Smoky</option>
+                </select>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="blushEnabled">
+                <label class="toggle-switch" for="blushEnabled">
+                    <span>Blush</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Blush Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="blushColor" value="#ff9999">
+                    <span id="blushColorValue">#ff9999</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <input type="checkbox" id="eyeshadowEnabled">
+                <label class="toggle-switch" for="eyeshadowEnabled">
+                    <span>Eyeshadow</span>
+                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                </label>
+            </div>
+            
+            <div class="setting-group">
+                <label>Eyeshadow Color</label>
+                <div class="color-picker-wrap">
+                    <input type="color" id="eyeshadowColor" value="#8844aa">
+                    <span id="eyeshadowColorValue">#8844aa</span>
+                </div>
+            </div>
+            
+            <h3>Face Morph</h3>
+            
+            <div class="setting-group">
+                <label>Morph Preset</label>
+                <div class="preset-buttons">
+                    <button class="preset-btn morph-preset-btn" id="morphNone">None</button>
+                    <button class="preset-btn morph-preset-btn" id="morphCartoon">Cartoon</button>
+                    <button class="preset-btn morph-preset-btn" id="morphAlien">Alien</button>
+                    <button class="preset-btn morph-preset-btn" id="morphBaby">Baby</button>
+                    <button class="preset-btn morph-preset-btn" id="morphSlim">Slim</button>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Eye Size</label>
+                <input type="range" id="morphEyeSize" min="0.5" max="2" step="0.1" value="1">
+                <div class="setting-value" id="morphEyeSizeValue">1.0x</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Nose Size</label>
+                <input type="range" id="morphNoseSize" min="0.5" max="1.5" step="0.1" value="1">
+                <div class="setting-value" id="morphNoseSizeValue">1.0x</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Face Width</label>
+                <input type="range" id="morphFaceWidth" min="0.7" max="1.3" step="0.05" value="1">
+                <div class="setting-value" id="morphFaceWidthValue">1.0x</div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Chin Size</label>
+                <input type="range" id="morphChinSize" min="0.7" max="1.3" step="0.05" value="1">
+                <div class="setting-value" id="morphChinSizeValue">1.0x</div>
             </div>
             
             <h3>Presets</h3>

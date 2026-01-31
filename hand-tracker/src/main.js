@@ -1,10 +1,12 @@
 // Face Filter App - Main Entry Point
 import { FaceTracker, getFaceTransform } from './face-tracker.js';
+import { HandTracker } from './hand-tracker.js';
 import { MaskRenderer } from './mask-renderer.js';
 import { WebGLMaskRenderer } from './webgl-mask-renderer.js';
 import { FaceTextureExtractor, loadImageFromFile, loadImageFromURL } from './face-texture-extractor.js';
 import { TextureBlender } from './texture-blender.js';
 import { ColorMatcher } from './color-matcher.js';
+import { moodAnalyzer } from './mood-analyzer.js';
 
 // DOM Elements
 const video = document.getElementById('video');
@@ -26,8 +28,22 @@ let showMesh = true;
 let showMask = false;  // Start with mask off
 let faceSwapMode = false;
 let faceTracker = null;
+let handTracker = null;  // Hand tracking
 let maskRenderer = null;  // 2D canvas renderer for mesh visualization
 let webglMaskRenderer = null;  // WebGL renderer for 3D mask wrapping
+
+// Recording state
+let isRecording = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingCanvas = null;
+let recordingCtx = null;
+
+// Custom mesh connection state
+let customConnections = [];  // Array of [landmarkIdx1, landmarkIdx2] pairs
+let selectedLandmark = null;  // Currently selected landmark index (first click)
+let isConnectionMode = false;  // Whether connection mode is active
+let currentLandmarks = null;  // Store current frame's landmarks for click detection
 
 // Mesh settings (controllable via UI)
 const meshSettings = {
@@ -42,6 +58,13 @@ const meshSettings = {
   strokeColor: '#00ffff',
   fillColor: '#ffffff',
   fillOpacity: 0.05,
+  // Adaptive LOD
+  useAdaptiveLOD: false,
+  enableDenseLandmarks: true,
+  enableSubdivision: true,
+  lodLevel: 1.0,
+  enableSymmetry: true,
+  showRegionColors: false,
   // Contours
   contourWidth: 1.5,
   contourColor: '#00ff88',
@@ -50,6 +73,20 @@ const meshSettings = {
   showLips: true,
   showNose: true,
   showFaceOval: true,
+  // Iris tracking - enabled by default
+  showIrisTracking: true,
+  showGazeDirection: true,
+  // Mood detection
+  showMoodDetection: true,
+  showEmotionWheel: true,
+  showEmotionBars: false,
+  moodSmoothing: 0.3,
+  // Hand tracking
+  enableHandTracking: true,
+  showHandConnections: true,
+  showHandLandmarks: true,
+  showHandGestures: true,
+  showHandLabels: true,
   // Effects
   showExpressions: true,
   showKeyPoints: true,
@@ -65,6 +102,175 @@ const meshSettings = {
   showFPS: false,
   showLandmarkIndices: false,
   bgColor: '#000000'
+};
+
+// Mask design settings (for procedural masks)
+const maskDesign = {
+  // Shape
+  shape: 'classic',           // classic, angular, masquerade, ninja, phantom
+  coverage: 'upper',          // full, upper, lower
+  
+  // Colors
+  primaryColor: '#1a1a2e',    // Main mask color
+  secondaryColor: '#16213e',  // Gradient/accent color
+  borderColor: '#e94560',     // Border/trim color
+  useGradient: true,          // Use gradient fill
+  
+  // Border
+  borderWidth: 3,             // Border thickness
+  borderGlow: true,           // Add glow effect to border
+  glowIntensity: 0.5,         // Glow strength (0-1)
+  
+  // Eye holes
+  eyeHoleShape: 'pointed',    // oval, pointed, round, narrow
+  eyeHoleSize: 1.0,           // Multiplier for eye hole size
+  eyeHoleBorder: true,        // Draw border around eye holes
+  
+  // Surface effects
+  surfaceEffect: 'matte',     // matte, metallic, textured
+  opacity: 0.95,              // Overall mask opacity
+  
+  // Decorations
+  showPattern: false,         // Add decorative pattern
+  patternType: 'none'         // none, dots, lines, scales
+};
+
+// Mask shape presets
+const maskPresets = {
+  classic: {
+    shape: 'classic',
+    coverage: 'upper',
+    primaryColor: '#1a1a2e',
+    secondaryColor: '#16213e',
+    borderColor: '#e94560',
+    useGradient: true,
+    borderWidth: 3,
+    borderGlow: true,
+    glowIntensity: 0.5,
+    eyeHoleShape: 'pointed',
+    eyeHoleSize: 1.0,
+    surfaceEffect: 'matte',
+    opacity: 0.95
+  },
+  angular: {
+    shape: 'angular',
+    coverage: 'upper',
+    primaryColor: '#0f0f0f',
+    secondaryColor: '#1a1a1a',
+    borderColor: '#ffd700',
+    useGradient: true,
+    borderWidth: 4,
+    borderGlow: true,
+    glowIntensity: 0.7,
+    eyeHoleShape: 'narrow',
+    eyeHoleSize: 0.9,
+    surfaceEffect: 'metallic',
+    opacity: 1.0
+  },
+  masquerade: {
+    shape: 'masquerade',
+    coverage: 'upper',
+    primaryColor: '#4a0e4e',
+    secondaryColor: '#81007f',
+    borderColor: '#ffd700',
+    useGradient: true,
+    borderWidth: 5,
+    borderGlow: true,
+    glowIntensity: 0.8,
+    eyeHoleShape: 'oval',
+    eyeHoleSize: 1.1,
+    surfaceEffect: 'metallic',
+    opacity: 0.95
+  },
+  ninja: {
+    shape: 'ninja',
+    coverage: 'lower',
+    primaryColor: '#1a1a1a',
+    secondaryColor: '#2d2d2d',
+    borderColor: '#333333',
+    useGradient: false,
+    borderWidth: 0,
+    borderGlow: false,
+    glowIntensity: 0,
+    eyeHoleShape: 'narrow',
+    eyeHoleSize: 0,
+    surfaceEffect: 'matte',
+    opacity: 0.98
+  },
+  phantom: {
+    shape: 'phantom',
+    coverage: 'half',
+    primaryColor: '#f5f5f5',
+    secondaryColor: '#e0e0e0',
+    borderColor: '#cccccc',
+    useGradient: true,
+    borderWidth: 2,
+    borderGlow: false,
+    glowIntensity: 0,
+    eyeHoleShape: 'oval',
+    eyeHoleSize: 1.0,
+    surfaceEffect: 'matte',
+    opacity: 1.0
+  }
+};
+
+// Accessory/overlay filter settings
+const accessorySettings = {
+  enabled: false,
+  type: 'none',           // none, sunglasses, aviators, hearts, stars, crown, cat_ears, dog_ears, hat
+  color: '#000000',       // Tint color for accessories
+  opacity: 1.0,
+  scale: 1.0
+};
+
+// Makeup filter settings
+const makeupSettings = {
+  enabled: false,
+  // Lipstick
+  lipstickEnabled: false,
+  lipstickColor: '#cc2244',
+  lipstickOpacity: 0.7,
+  lipstickGloss: true,
+  // Eyeliner
+  eyelinerEnabled: false,
+  eyelinerColor: '#000000',
+  eyelinerWidth: 2,
+  eyelinerStyle: 'classic',  // classic, wing, smoky
+  // Blush
+  blushEnabled: false,
+  blushColor: '#ff9999',
+  blushOpacity: 0.3,
+  blushIntensity: 0.5,
+  // Eyeshadow
+  eyeshadowEnabled: false,
+  eyeshadowColor: '#8844aa',
+  eyeshadowOpacity: 0.4
+};
+
+// Face morphing settings
+const morphSettings = {
+  enabled: false,
+  // Eye size
+  eyeSize: 1.0,           // 0.5 = smaller, 2.0 = bigger
+  // Nose size
+  noseSize: 1.0,          // 0.5 = smaller, 1.5 = bigger
+  // Face width
+  faceWidth: 1.0,         // 0.8 = narrower, 1.2 = wider
+  // Forehead
+  foreheadSize: 1.0,
+  // Chin
+  chinSize: 1.0,
+  // Preset effects
+  preset: 'none'          // none, cartoon, alien, baby, slim
+};
+
+// Morph presets
+const morphPresets = {
+  none: { eyeSize: 1.0, noseSize: 1.0, faceWidth: 1.0, foreheadSize: 1.0, chinSize: 1.0 },
+  cartoon: { eyeSize: 1.6, noseSize: 0.7, faceWidth: 0.9, foreheadSize: 1.1, chinSize: 0.8 },
+  alien: { eyeSize: 1.8, noseSize: 0.5, faceWidth: 0.85, foreheadSize: 1.3, chinSize: 0.7 },
+  baby: { eyeSize: 1.4, noseSize: 0.8, faceWidth: 1.1, foreheadSize: 1.0, chinSize: 0.9 },
+  slim: { eyeSize: 1.0, noseSize: 0.9, faceWidth: 0.85, foreheadSize: 1.0, chinSize: 0.9 }
 };
 
 // Settings presets
@@ -162,52 +368,119 @@ const presets = {
 // Face swap components
 let textureExtractor = null;
 
-// Calculate transform for object-fit: cover
-// Video is 1920x1080 (landscape), display is 378x756 (portrait)
-// With cover, video height fills display, sides are cropped
+// Calculate transform for object-fit: contain (no cropping)
 function calculateVideoTransform(videoWidth, videoHeight, displayWidth, displayHeight) {
-  const videoAspect = videoWidth / videoHeight;  // 1.78 (landscape)
-  const displayAspect = displayWidth / displayHeight;  // 0.5 (portrait)
-  
-  // Video is wider - scaled by height, sides cropped
-  // Scaled video width in display pixels
-  const scaledVideoWidth = displayHeight * videoAspect;  // 756 * 1.78 = 1345
-  
-  // How much is cropped from each side (in video normalized coords)
-  const cropX = (scaledVideoWidth - displayWidth) / scaledVideoWidth / 2;  // 0.36
-  
-  // Visible portion of video X (normalized)
-  const visibleXStart = cropX;  // 0.36
-  const visibleXEnd = 1 - cropX;  // 0.64
-  const visibleXRange = visibleXEnd - visibleXStart;  // 0.28
-  
   return {
     videoWidth, videoHeight,
     displayWidth, displayHeight,
-    visibleXStart,
-    visibleXRange
+    visibleXStart: 0,
+    visibleXRange: 1
   };
 }
 
-// Transform landmarks with crop adjustment AND mirroring
-// SOLUTION 3: Handle mirroring in JavaScript instead of CSS
+// Transform landmarks - mirror only, no symmetry correction
+// The asymmetry is inherent in MediaPipe's detection based on face angle/camera
 function transformLandmarksSimple(landmarks, transform) {
-  if (!transform) return landmarks;
+  return landmarks.map(lm => ({
+    x: 1 - lm.x,
+    y: lm.y,
+    z: lm.z
+  }));
+}
+
+// Set up canvas click handler for custom mesh connections
+function setupCanvasClickHandler(canvas, displayWidth, displayHeight) {
+  canvas.style.pointerEvents = 'auto';
+  canvas.style.cursor = 'crosshair';
   
-  const { visibleXStart, visibleXRange } = transform;
-  
-  return landmarks.map(lm => {
-    // Map X from visible range to [0, 1]
-    let x = (lm.x - visibleXStart) / visibleXRange;
+  canvas.addEventListener('click', (e) => {
+    if (!isConnectionMode || !currentLandmarks) return;
     
-    // Mirror X coordinate (replaces CSS scaleX(-1))
-    x = 1 - x;
+    // Get click position relative to canvas
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = displayWidth / rect.width;
+    const scaleY = displayHeight / rect.height;
+    const clickX = (e.clientX - rect.left) * scaleX;
+    const clickY = (e.clientY - rect.top) * scaleY;
     
-    const y = lm.y;
+    // Find nearest landmark
+    const nearestIdx = findNearestLandmark(clickX, clickY, currentLandmarks, displayWidth, displayHeight);
     
-    return { x, y, z: lm.z };
+    if (nearestIdx === -1) return;
+    
+    if (selectedLandmark === null) {
+      // First click - select this landmark
+      selectedLandmark = nearestIdx;
+      status.textContent = `Selected point ${nearestIdx} - click another point to connect`;
+    } else {
+      // Second click - create connection
+      if (nearestIdx !== selectedLandmark) {
+        // Check if connection already exists
+        const exists = customConnections.some(([a, b]) => 
+          (a === selectedLandmark && b === nearestIdx) || 
+          (a === nearestIdx && b === selectedLandmark)
+        );
+        
+        if (!exists) {
+          customConnections.push([selectedLandmark, nearestIdx]);
+          status.textContent = `Connected ${selectedLandmark} to ${nearestIdx} (${customConnections.length} connections)`;
+        } else {
+          // Remove existing connection
+          customConnections = customConnections.filter(([a, b]) => 
+            !((a === selectedLandmark && b === nearestIdx) || (a === nearestIdx && b === selectedLandmark))
+          );
+          status.textContent = `Removed connection (${customConnections.length} connections)`;
+        }
+      }
+      selectedLandmark = null;
+    }
   });
 }
+
+// Find the nearest landmark to a click position
+function findNearestLandmark(clickX, clickY, landmarks, canvasWidth, canvasHeight) {
+  let nearestIdx = -1;
+  let nearestDist = Infinity;
+  const maxDist = 20; // Maximum distance in pixels to consider a click "on" a landmark
+  
+  for (let i = 0; i < landmarks.length; i++) {
+    const lm = landmarks[i];
+    const x = lm.x * canvasWidth;
+    const y = lm.y * canvasHeight;
+    const dist = Math.sqrt((clickX - x) ** 2 + (clickY - y) ** 2);
+    
+    if (dist < nearestDist && dist < maxDist) {
+      nearestDist = dist;
+      nearestIdx = i;
+    }
+  }
+  
+  return nearestIdx;
+}
+
+// Toggle connection mode
+function toggleConnectionMode() {
+  isConnectionMode = !isConnectionMode;
+  selectedLandmark = null;
+  
+  const btn = document.getElementById('toggleConnectionMode');
+  if (btn) {
+    btn.classList.toggle('active', isConnectionMode);
+    btn.textContent = isConnectionMode ? 'Exit Connect Mode' : 'Connect Points';
+  }
+  
+  status.textContent = isConnectionMode 
+    ? 'Connection mode: Click two points to connect them' 
+    : `Connection mode off (${customConnections.length} connections)`;
+}
+
+// Clear all custom connections
+function clearConnections() {
+  customConnections = [];
+  selectedLandmark = null;
+  status.textContent = 'All custom connections cleared';
+}
+
 let textureBlender = null;
 let colorMatcher = null;
 let uploadedImages = [];  // Array of { file, img, processed: boolean }
@@ -222,8 +495,10 @@ function initSettingsControls() {
     { id: 'vertexRadius', key: 'vertexRadius', format: v => v.toFixed(1) },
     { id: 'meshOpacity', key: 'meshOpacity', format: v => Math.round(v * 100) + '%' },
     { id: 'fillOpacity', key: 'fillOpacity', format: v => Math.round(v * 100) + '%' },
+    { id: 'lodLevel', key: 'lodLevel', format: v => Math.round(v * 100) + '%' },
     { id: 'contourWidth', key: 'contourWidth', format: v => v.toFixed(1) },
     { id: 'animationSpeed', key: 'animationSpeed', format: v => v.toFixed(1) + 'x' },
+    { id: 'moodSmoothing', key: 'moodSmoothing', format: v => Math.round(v * 100) + '%' },
     { id: 'videoBrightness', key: 'videoBrightness', format: v => Math.round(v * 100) + '%' },
     { id: 'videoContrast', key: 'videoContrast', format: v => Math.round(v * 100) + '%' },
     { id: 'videoSaturation', key: 'videoSaturation', format: v => Math.round(v * 100) + '%' }
@@ -244,6 +519,11 @@ function initSettingsControls() {
         if (['videoBrightness', 'videoContrast', 'videoSaturation'].includes(key)) {
           applyVideoFilters();
         }
+        
+        // Update mood analyzer smoothing
+        if (key === 'moodSmoothing') {
+          moodAnalyzer.setSmoothingFactor(meshSettings.moodSmoothing);
+        }
       });
     }
   });
@@ -251,7 +531,13 @@ function initSettingsControls() {
   // Toggle controls
   const toggles = [
     'showVertices', 'showContours', 'useDepth', 'showTriangles',
+    'useAdaptiveLOD', 'enableDenseLandmarks', 'enableSubdivision', 
+    'enableSymmetry', 'showRegionColors',
     'showEyes', 'showEyebrows', 'showLips', 'showNose', 'showFaceOval',
+    'showIrisTracking', 'showGazeDirection',
+    'enableHandTracking', 'showHandConnections', 'showHandLandmarks', 
+    'showHandGestures', 'showHandLabels',
+    'showMoodDetection', 'showEmotionWheel', 'showEmotionBars',
     'showExpressions', 'showKeyPoints', 'pulseEffect',
     'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
   ];
@@ -260,7 +546,7 @@ function initSettingsControls() {
     const toggle = document.getElementById(key);
     if (toggle) {
       toggle.checked = meshSettings[key];
-      toggle.addEventListener('change', (e) => {
+      toggle.addEventListener('change', async (e) => {
         meshSettings[key] = e.target.checked;
         
         // Apply special effects
@@ -269,6 +555,11 @@ function initSettingsControls() {
         }
         if (key === 'showVideo') {
           video.style.opacity = e.target.checked ? '1' : '0';
+        }
+        
+        // Initialize hand tracking when enabled
+        if (key === 'enableHandTracking' && e.target.checked) {
+          await initializeHandTracking();
         }
       });
     }
@@ -317,9 +608,357 @@ function initSettingsControls() {
       btn.addEventListener('click', () => {
         applyPreset(presetName);
         // Update active state
-        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.preset-btn:not(.mask-preset-btn)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
       });
+    }
+  });
+  
+  // Initialize mask designer controls
+  initMaskDesignerControls();
+}
+
+// Initialize mask designer UI controls
+function initMaskDesignerControls() {
+  // Mask preset buttons
+  const maskPresetButtons = {
+    'maskClassic': 'classic',
+    'maskAngular': 'angular',
+    'maskMasquerade': 'masquerade',
+    'maskNinja': 'ninja',
+    'maskPhantom': 'phantom'
+  };
+
+  Object.entries(maskPresetButtons).forEach(([btnId, presetName]) => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        applyMaskPreset(presetName);
+        // Update active state
+        document.querySelectorAll('.mask-preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    }
+  });
+
+  // Mask sliders
+  const maskSliders = [
+    { id: 'maskBorderWidth', key: 'borderWidth', format: v => v.toFixed(1) },
+    { id: 'maskGlowIntensity', key: 'glowIntensity', format: v => Math.round(v * 100) + '%' },
+    { id: 'maskEyeHoleSize', key: 'eyeHoleSize', format: v => v.toFixed(1) + 'x' },
+    { id: 'maskOpacity', key: 'opacity', format: v => Math.round(v * 100) + '%' }
+  ];
+
+  maskSliders.forEach(({ id, key, format }) => {
+    const slider = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (slider) {
+      slider.value = maskDesign[key];
+      if (valueDisplay) valueDisplay.textContent = format(maskDesign[key]);
+      
+      slider.addEventListener('input', (e) => {
+        maskDesign[key] = parseFloat(e.target.value);
+        if (valueDisplay) valueDisplay.textContent = format(maskDesign[key]);
+      });
+    }
+  });
+
+  // Mask toggles
+  const maskToggles = ['maskUseGradient', 'maskBorderGlow', 'maskEyeHoleBorder'];
+  const maskToggleKeys = { 
+    'maskUseGradient': 'useGradient', 
+    'maskBorderGlow': 'borderGlow', 
+    'maskEyeHoleBorder': 'eyeHoleBorder' 
+  };
+  
+  maskToggles.forEach(id => {
+    const toggle = document.getElementById(id);
+    const key = maskToggleKeys[id];
+    if (toggle && key) {
+      toggle.checked = maskDesign[key];
+      toggle.addEventListener('change', (e) => {
+        maskDesign[key] = e.target.checked;
+      });
+    }
+  });
+
+  // Mask color pickers
+  const maskColors = [
+    { id: 'maskPrimaryColor', key: 'primaryColor' },
+    { id: 'maskSecondaryColor', key: 'secondaryColor' },
+    { id: 'maskBorderColor', key: 'borderColor' }
+  ];
+
+  maskColors.forEach(({ id, key }) => {
+    const picker = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (picker) {
+      picker.value = maskDesign[key];
+      if (valueDisplay) valueDisplay.textContent = maskDesign[key];
+      
+      picker.addEventListener('input', (e) => {
+        maskDesign[key] = e.target.value;
+        if (valueDisplay) valueDisplay.textContent = e.target.value;
+      });
+    }
+  });
+}
+
+// Apply a mask preset
+function applyMaskPreset(presetName) {
+  const preset = maskPresets[presetName];
+  if (!preset) return;
+
+  // Update maskDesign with preset values
+  Object.assign(maskDesign, preset);
+
+  // Update UI elements
+  const sliderUpdates = [
+    { id: 'maskBorderWidth', key: 'borderWidth', format: v => v.toFixed(1) },
+    { id: 'maskGlowIntensity', key: 'glowIntensity', format: v => Math.round(v * 100) + '%' },
+    { id: 'maskEyeHoleSize', key: 'eyeHoleSize', format: v => v.toFixed(1) + 'x' },
+    { id: 'maskOpacity', key: 'opacity', format: v => Math.round(v * 100) + '%' }
+  ];
+
+  sliderUpdates.forEach(({ id, key, format }) => {
+    const slider = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (slider && maskDesign[key] !== undefined) {
+      slider.value = maskDesign[key];
+      if (valueDisplay) valueDisplay.textContent = format(maskDesign[key]);
+    }
+  });
+
+  // Update toggles
+  const maskToggles = { 
+    'maskUseGradient': 'useGradient', 
+    'maskBorderGlow': 'borderGlow', 
+    'maskEyeHoleBorder': 'eyeHoleBorder' 
+  };
+  
+  Object.entries(maskToggles).forEach(([id, key]) => {
+    const toggle = document.getElementById(id);
+    if (toggle && maskDesign[key] !== undefined) {
+      toggle.checked = maskDesign[key];
+    }
+  });
+
+  // Update color pickers
+  const colorUpdates = [
+    { id: 'maskPrimaryColor', key: 'primaryColor' },
+    { id: 'maskSecondaryColor', key: 'secondaryColor' },
+    { id: 'maskBorderColor', key: 'borderColor' }
+  ];
+
+  colorUpdates.forEach(({ id, key }) => {
+    const picker = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (picker && maskDesign[key]) {
+      picker.value = maskDesign[key];
+      if (valueDisplay) valueDisplay.textContent = maskDesign[key];
+    }
+  });
+}
+
+// Initialize accessory controls
+function initAccessoryControls() {
+  // Accessory type dropdown
+  const accessoryType = document.getElementById('accessoryType');
+  if (accessoryType) {
+    accessoryType.value = accessorySettings.type;
+    accessoryType.addEventListener('change', (e) => {
+      accessorySettings.type = e.target.value;
+      accessorySettings.enabled = e.target.value !== 'none';
+    });
+  }
+
+  // Accessory color
+  const accessoryColor = document.getElementById('accessoryColor');
+  const accessoryColorValue = document.getElementById('accessoryColorValue');
+  if (accessoryColor) {
+    accessoryColor.value = accessorySettings.color;
+    if (accessoryColorValue) accessoryColorValue.textContent = accessorySettings.color;
+    accessoryColor.addEventListener('input', (e) => {
+      accessorySettings.color = e.target.value;
+      if (accessoryColorValue) accessoryColorValue.textContent = e.target.value;
+    });
+  }
+
+  // Accessory scale
+  const accessoryScale = document.getElementById('accessoryScale');
+  const accessoryScaleValue = document.getElementById('accessoryScaleValue');
+  if (accessoryScale) {
+    accessoryScale.value = accessorySettings.scale;
+    if (accessoryScaleValue) accessoryScaleValue.textContent = accessorySettings.scale.toFixed(1) + 'x';
+    accessoryScale.addEventListener('input', (e) => {
+      accessorySettings.scale = parseFloat(e.target.value);
+      if (accessoryScaleValue) accessoryScaleValue.textContent = accessorySettings.scale.toFixed(1) + 'x';
+    });
+  }
+}
+
+// Initialize makeup controls
+function initMakeupControls() {
+  // Lipstick toggle
+  const lipstickEnabled = document.getElementById('lipstickEnabled');
+  if (lipstickEnabled) {
+    lipstickEnabled.checked = makeupSettings.lipstickEnabled;
+    lipstickEnabled.addEventListener('change', (e) => {
+      makeupSettings.lipstickEnabled = e.target.checked;
+      makeupSettings.enabled = makeupSettings.lipstickEnabled || makeupSettings.eyelinerEnabled || 
+                               makeupSettings.blushEnabled || makeupSettings.eyeshadowEnabled;
+    });
+  }
+
+  // Lipstick color
+  const lipstickColor = document.getElementById('lipstickColor');
+  const lipstickColorValue = document.getElementById('lipstickColorValue');
+  if (lipstickColor) {
+    lipstickColor.value = makeupSettings.lipstickColor;
+    if (lipstickColorValue) lipstickColorValue.textContent = makeupSettings.lipstickColor;
+    lipstickColor.addEventListener('input', (e) => {
+      makeupSettings.lipstickColor = e.target.value;
+      if (lipstickColorValue) lipstickColorValue.textContent = e.target.value;
+    });
+  }
+
+  // Eyeliner toggle
+  const eyelinerEnabled = document.getElementById('eyelinerEnabled');
+  if (eyelinerEnabled) {
+    eyelinerEnabled.checked = makeupSettings.eyelinerEnabled;
+    eyelinerEnabled.addEventListener('change', (e) => {
+      makeupSettings.eyelinerEnabled = e.target.checked;
+      makeupSettings.enabled = makeupSettings.lipstickEnabled || makeupSettings.eyelinerEnabled || 
+                               makeupSettings.blushEnabled || makeupSettings.eyeshadowEnabled;
+    });
+  }
+
+  // Eyeliner style
+  const eyelinerStyle = document.getElementById('eyelinerStyle');
+  if (eyelinerStyle) {
+    eyelinerStyle.value = makeupSettings.eyelinerStyle;
+    eyelinerStyle.addEventListener('change', (e) => {
+      makeupSettings.eyelinerStyle = e.target.value;
+    });
+  }
+
+  // Blush toggle
+  const blushEnabled = document.getElementById('blushEnabled');
+  if (blushEnabled) {
+    blushEnabled.checked = makeupSettings.blushEnabled;
+    blushEnabled.addEventListener('change', (e) => {
+      makeupSettings.blushEnabled = e.target.checked;
+      makeupSettings.enabled = makeupSettings.lipstickEnabled || makeupSettings.eyelinerEnabled || 
+                               makeupSettings.blushEnabled || makeupSettings.eyeshadowEnabled;
+    });
+  }
+
+  // Blush color
+  const blushColor = document.getElementById('blushColor');
+  const blushColorValue = document.getElementById('blushColorValue');
+  if (blushColor) {
+    blushColor.value = makeupSettings.blushColor;
+    if (blushColorValue) blushColorValue.textContent = makeupSettings.blushColor;
+    blushColor.addEventListener('input', (e) => {
+      makeupSettings.blushColor = e.target.value;
+      if (blushColorValue) blushColorValue.textContent = e.target.value;
+    });
+  }
+
+  // Eyeshadow toggle
+  const eyeshadowEnabled = document.getElementById('eyeshadowEnabled');
+  if (eyeshadowEnabled) {
+    eyeshadowEnabled.checked = makeupSettings.eyeshadowEnabled;
+    eyeshadowEnabled.addEventListener('change', (e) => {
+      makeupSettings.eyeshadowEnabled = e.target.checked;
+      makeupSettings.enabled = makeupSettings.lipstickEnabled || makeupSettings.eyelinerEnabled || 
+                               makeupSettings.blushEnabled || makeupSettings.eyeshadowEnabled;
+    });
+  }
+
+  // Eyeshadow color
+  const eyeshadowColor = document.getElementById('eyeshadowColor');
+  const eyeshadowColorValue = document.getElementById('eyeshadowColorValue');
+  if (eyeshadowColor) {
+    eyeshadowColor.value = makeupSettings.eyeshadowColor;
+    if (eyeshadowColorValue) eyeshadowColorValue.textContent = makeupSettings.eyeshadowColor;
+    eyeshadowColor.addEventListener('input', (e) => {
+      makeupSettings.eyeshadowColor = e.target.value;
+      if (eyeshadowColorValue) eyeshadowColorValue.textContent = e.target.value;
+    });
+  }
+}
+
+// Initialize morph controls
+function initMorphControls() {
+  // Morph preset buttons
+  const morphPresetButtons = {
+    'morphNone': 'none',
+    'morphCartoon': 'cartoon',
+    'morphAlien': 'alien',
+    'morphBaby': 'baby',
+    'morphSlim': 'slim'
+  };
+
+  Object.entries(morphPresetButtons).forEach(([btnId, presetName]) => {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        applyMorphPreset(presetName);
+        document.querySelectorAll('.morph-preset-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    }
+  });
+
+  // Morph sliders
+  const morphSliders = [
+    { id: 'morphEyeSize', key: 'eyeSize' },
+    { id: 'morphNoseSize', key: 'noseSize' },
+    { id: 'morphFaceWidth', key: 'faceWidth' },
+    { id: 'morphChinSize', key: 'chinSize' }
+  ];
+
+  morphSliders.forEach(({ id, key }) => {
+    const slider = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (slider) {
+      slider.value = morphSettings[key];
+      if (valueDisplay) valueDisplay.textContent = morphSettings[key].toFixed(1) + 'x';
+      
+      slider.addEventListener('input', (e) => {
+        morphSettings[key] = parseFloat(e.target.value);
+        morphSettings.enabled = morphSettings.eyeSize !== 1.0 || morphSettings.noseSize !== 1.0 ||
+                                morphSettings.faceWidth !== 1.0 || morphSettings.chinSize !== 1.0;
+        if (valueDisplay) valueDisplay.textContent = morphSettings[key].toFixed(1) + 'x';
+      });
+    }
+  });
+}
+
+// Apply morph preset
+function applyMorphPreset(presetName) {
+  const preset = morphPresets[presetName];
+  if (!preset) return;
+
+  Object.assign(morphSettings, preset);
+  morphSettings.enabled = presetName !== 'none';
+  morphSettings.preset = presetName;
+
+  // Update sliders
+  const morphSliders = [
+    { id: 'morphEyeSize', key: 'eyeSize' },
+    { id: 'morphNoseSize', key: 'noseSize' },
+    { id: 'morphFaceWidth', key: 'faceWidth' },
+    { id: 'morphChinSize', key: 'chinSize' }
+  ];
+
+  morphSliders.forEach(({ id, key }) => {
+    const slider = document.getElementById(id);
+    const valueDisplay = document.getElementById(id + 'Value');
+    if (slider && morphSettings[key] !== undefined) {
+      slider.value = morphSettings[key];
+      if (valueDisplay) valueDisplay.textContent = morphSettings[key].toFixed(1) + 'x';
     }
   });
 }
@@ -328,6 +967,149 @@ function initSettingsControls() {
 function applyVideoFilters() {
   const { videoBrightness, videoContrast, videoSaturation } = meshSettings;
   video.style.filter = `brightness(${videoBrightness}) contrast(${videoContrast}) saturate(${videoSaturation})`;
+}
+
+// Initialize recording canvas (composites video + mesh overlay)
+function initRecordingCanvas() {
+  recordingCanvas = document.createElement('canvas');
+  recordingCanvas.width = 378;
+  recordingCanvas.height = 756;
+  recordingCtx = recordingCanvas.getContext('2d');
+}
+
+// Update recording canvas each frame
+function updateRecordingCanvas() {
+  if (!recordingCtx || !isRecording) return;
+  
+  // Clear
+  recordingCtx.clearRect(0, 0, recordingCanvas.width, recordingCanvas.height);
+  
+  // Draw video (mirrored if needed)
+  recordingCtx.save();
+  if (meshSettings.mirrorVideo) {
+    recordingCtx.scale(-1, 1);
+    recordingCtx.translate(-recordingCanvas.width, 0);
+  }
+  
+  // Apply video filters
+  recordingCtx.filter = `brightness(${meshSettings.videoBrightness}) contrast(${meshSettings.videoContrast}) saturate(${meshSettings.videoSaturation})`;
+  
+  // Calculate crop for object-fit: cover
+  const videoAspect = video.videoWidth / video.videoHeight;
+  const canvasAspect = recordingCanvas.width / recordingCanvas.height;
+  
+  let sx, sy, sw, sh;
+  if (videoAspect > canvasAspect) {
+    // Video is wider - crop sides
+    sh = video.videoHeight;
+    sw = sh * canvasAspect;
+    sx = (video.videoWidth - sw) / 2;
+    sy = 0;
+  } else {
+    // Video is taller - crop top/bottom
+    sw = video.videoWidth;
+    sh = sw / canvasAspect;
+    sx = 0;
+    sy = (video.videoHeight - sh) / 2;
+  }
+  
+  if (meshSettings.showVideo) {
+    recordingCtx.drawImage(video, sx, sy, sw, sh, 0, 0, recordingCanvas.width, recordingCanvas.height);
+  }
+  
+  recordingCtx.filter = 'none';
+  recordingCtx.restore();
+  
+  // Draw mesh overlay (already correctly positioned)
+  recordingCtx.drawImage(canvas, 0, 0);
+}
+
+// Start recording
+function startRecording() {
+  if (isRecording) return;
+  
+  initRecordingCanvas();
+  recordedChunks = [];
+  
+  // Get stream from recording canvas
+  const stream = recordingCanvas.captureStream(30); // 30 FPS
+  
+  // Try different codecs
+  const mimeTypes = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4'
+  ];
+  
+  let selectedMime = mimeTypes.find(mime => MediaRecorder.isTypeSupported(mime)) || 'video/webm';
+  
+  mediaRecorder = new MediaRecorder(stream, { 
+    mimeType: selectedMime,
+    videoBitsPerSecond: 5000000 // 5 Mbps
+  });
+  
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) {
+      recordedChunks.push(e.data);
+    }
+  };
+  
+  mediaRecorder.onstop = () => {
+    // Create blob and download
+    const blob = new Blob(recordedChunks, { type: selectedMime });
+    const url = URL.createObjectURL(blob);
+    
+    // Create download link
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `face-recording-${Date.now()}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Cleanup
+    URL.revokeObjectURL(url);
+    recordedChunks = [];
+  };
+  
+  mediaRecorder.start(100); // Collect data every 100ms
+  isRecording = true;
+  
+  // Update button
+  const recordBtn = document.getElementById('recordBtn');
+  if (recordBtn) {
+    recordBtn.textContent = 'Stop';
+    recordBtn.classList.add('recording');
+  }
+  
+  console.log('Recording started with', selectedMime);
+}
+
+// Stop recording
+function stopRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  
+  mediaRecorder.stop();
+  isRecording = false;
+  
+  // Update button
+  const recordBtn = document.getElementById('recordBtn');
+  if (recordBtn) {
+    recordBtn.textContent = 'Record';
+    recordBtn.classList.remove('recording');
+  }
+  
+  console.log('Recording stopped');
+}
+
+// Toggle recording
+function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
 }
 
 // Apply a preset to settings and update UI
@@ -344,8 +1126,10 @@ function applyPreset(presetName) {
     { id: 'vertexRadius', format: v => v.toFixed(1) },
     { id: 'meshOpacity', format: v => Math.round(v * 100) + '%' },
     { id: 'fillOpacity', format: v => Math.round(v * 100) + '%' },
+    { id: 'lodLevel', format: v => Math.round(v * 100) + '%' },
     { id: 'contourWidth', format: v => v.toFixed(1) },
     { id: 'animationSpeed', format: v => v.toFixed(1) + 'x' },
+    { id: 'moodSmoothing', format: v => Math.round(v * 100) + '%' },
     { id: 'videoBrightness', format: v => Math.round(v * 100) + '%' },
     { id: 'videoContrast', format: v => Math.round(v * 100) + '%' },
     { id: 'videoSaturation', format: v => Math.round(v * 100) + '%' }
@@ -363,7 +1147,13 @@ function applyPreset(presetName) {
   // Update toggle UIs
   const allToggles = [
     'showVertices', 'showContours', 'useDepth', 'showTriangles',
+    'useAdaptiveLOD', 'enableDenseLandmarks', 'enableSubdivision',
+    'enableSymmetry', 'showRegionColors',
     'showEyes', 'showEyebrows', 'showLips', 'showNose', 'showFaceOval',
+    'showIrisTracking', 'showGazeDirection',
+    'enableHandTracking', 'showHandConnections', 'showHandLandmarks',
+    'showHandGestures', 'showHandLabels',
+    'showMoodDetection', 'showEmotionWheel', 'showEmotionBars',
     'showExpressions', 'showKeyPoints', 'pulseEffect',
     'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
   ];
@@ -390,6 +1180,37 @@ function applyPreset(presetName) {
   video.style.opacity = meshSettings.showVideo ? '1' : '0';
   video.style.transform = meshSettings.mirrorVideo ? 'scaleX(-1)' : 'none';
   document.body.style.background = meshSettings.bgColor;
+}
+
+// Initialize hand tracking (on demand)
+async function initializeHandTracking() {
+  if (handTracker) {
+    console.log('Hand tracker already initialized');
+    return;
+  }
+  
+  console.log('Initializing hand tracking...');
+  status.textContent = 'Loading hand tracking model...';
+  
+  try {
+    handTracker = new HandTracker(video, null, (percent, stage) => {
+      status.textContent = `Loading hands: ${percent}%`;
+    });
+    
+    await handTracker.initialize();
+    status.textContent = 'Hand tracking ready!';
+    console.log('Hand tracking initialized successfully');
+    
+    setTimeout(() => {
+      status.textContent = 'Tracking...';
+    }, 1500);
+  } catch (error) {
+    console.error('Failed to initialize hand tracking:', error);
+    status.textContent = 'Hand tracking failed to load';
+    meshSettings.enableHandTracking = false;
+    const toggle = document.getElementById('enableHandTracking');
+    if (toggle) toggle.checked = false;
+  }
 }
 
 // Initialize the app
@@ -422,9 +1243,9 @@ async function init() {
   }
 
   try {
-    // SOLUTION 3: Canvas at display size, mirroring in JavaScript
-    const displayWidth = 378;
-    const displayHeight = 756;
+    // Canvas matches video-wrap size (960x540, 16:9 landscape)
+    const displayWidth = 960;
+    const displayHeight = 540;
     canvas.width = displayWidth;
     canvas.height = displayHeight;
     console.log('Canvas set to display size:', canvas.width, 'x', canvas.height);
@@ -440,6 +1261,9 @@ async function init() {
     // Create 2D mask renderer for mesh visualization
     maskRenderer = new MaskRenderer(canvas);
     console.log('2D mask renderer created');
+    
+    // Set up click handler for custom mesh connections
+    setupCanvasClickHandler(canvas, displayWidth, displayHeight);
 
     // Create WebGL canvas for 3D mask rendering
     status.textContent = 'Setting up WebGL...';
@@ -519,6 +1343,11 @@ async function init() {
       if (progressContainer) progressContainer.style.display = 'none';
       status.textContent = 'Ready! 478 landmarks + 52 expressions';
       status.style.color = '#00ff88';
+      
+      // Initialize hand tracking if enabled by default
+      if (meshSettings.enableHandTracking) {
+        await initializeHandTracking();
+      }
     } catch (initError) {
       if (progressContainer) progressContainer.style.display = 'none';
       console.error('Face tracker init failed:', initError);
@@ -553,8 +1382,30 @@ async function init() {
       });
     }
 
+    // Record button
+    const recordBtn = document.getElementById('recordBtn');
+    if (recordBtn) {
+      recordBtn.addEventListener('click', toggleRecording);
+    }
+
+    // Connection mode buttons
+    const toggleConnectionModeBtn = document.getElementById('toggleConnectionMode');
+    if (toggleConnectionModeBtn) {
+      toggleConnectionModeBtn.addEventListener('click', toggleConnectionMode);
+    }
+    
+    const clearConnectionsBtn = document.getElementById('clearConnections');
+    if (clearConnectionsBtn) {
+      clearConnectionsBtn.addEventListener('click', clearConnections);
+    }
+
     // Initialize settings controls
     initSettingsControls();
+    
+    // Initialize new filter controls
+    initAccessoryControls();
+    initMakeupControls();
+    initMorphControls();
 
     // Initialize face swap components
     console.log('Creating face swap components...');
@@ -1033,9 +1884,16 @@ function onFaceResults(results) {
   }
 
   if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-    // SOLUTION 3: Transform landmarks with crop adjustment AND mirroring in JS
     const rawLandmarks = results.multiFaceLandmarks[0];
-    const landmarks = transformLandmarksSimple(rawLandmarks, window.videoTransform);
+    let landmarks = transformLandmarksSimple(rawLandmarks, window.videoTransform);
+    
+    // Store current landmarks for click detection in connection mode
+    currentLandmarks = landmarks;
+    
+    // Apply face morphing if enabled
+    if (morphSettings.enabled) {
+      landmarks = maskRenderer.drawMorphedFace(landmarks, canvas.width, canvas.height, morphSettings) || landmarks;
+    }
     
     // Store expressions for use by renderers
     currentExpressions = results.expressions;
@@ -1066,6 +1924,13 @@ function onFaceResults(results) {
         strokeColor: meshSettings.strokeColor,
         fillColor: meshSettings.fillColor,
         fillOpacity: meshSettings.fillOpacity,
+        // Adaptive LOD settings
+        useAdaptiveLOD: meshSettings.useAdaptiveLOD,
+        enableDenseLandmarks: meshSettings.enableDenseLandmarks,
+        enableSubdivision: meshSettings.enableSubdivision,
+        lodLevel: meshSettings.lodLevel,
+        enableSymmetry: meshSettings.enableSymmetry,
+        showRegionColors: meshSettings.showRegionColors,
         // Contour settings
         contourWidth: meshSettings.contourWidth,
         contourColor: meshSettings.contourColor,
@@ -1084,14 +1949,71 @@ function onFaceResults(results) {
         maskRenderer.drawKeyPoints(transform);
       }
       
-      // Draw expression-reactive effects
+      // Draw iris tracking (landmarks 468-477)
+      if (meshSettings.showIrisTracking) {
+        maskRenderer.drawIrisTracking(landmarks, canvas.width, canvas.height, {
+          showGazeDirection: meshSettings.showGazeDirection
+        });
+      }
+      
+      // Draw expression-reactive effects (labels)
       if (meshSettings.showExpressions && results.expressions) {
         maskRenderer.drawExpressionEffects(landmarks, canvas.width, canvas.height, results.expressions);
+      }
+      
+      // Draw mood detection (valence-arousal analysis)
+      if (meshSettings.showMoodDetection && results.expressions && results.expressions.raw) {
+        // Analyze mood from raw blendshape scores
+        const moodData = moodAnalyzer.analyze(results.expressions.raw);
+        
+        // Draw mood indicator
+        maskRenderer.drawMoodIndicator(moodData, canvas.width, canvas.height, {
+          showMoodLabel: true,
+          showEmotionWheel: meshSettings.showEmotionWheel,
+          showEmotionBars: meshSettings.showEmotionBars,
+          position: 'top-left'  // Put mood on left, expressions on right
+        });
       }
       
       // Draw landmark indices if enabled
       if (meshSettings.showLandmarkIndices) {
         maskRenderer.drawLandmarkIndices(landmarks, canvas.width, canvas.height);
+      }
+      
+      // Draw makeup (applies to mesh view too)
+      if (makeupSettings.enabled) {
+        maskRenderer.drawMakeup(landmarks, canvas.width, canvas.height, makeupSettings);
+      }
+      
+      // Draw accessories
+      if (accessorySettings.enabled && accessorySettings.type !== 'none') {
+        maskRenderer.drawAccessory(landmarks, canvas.width, canvas.height, accessorySettings);
+      }
+      
+      // Draw custom connections
+      if (customConnections.length > 0) {
+        maskRenderer.drawCustomConnections(landmarks, canvas.width, canvas.height, customConnections);
+      }
+      
+      // Highlight selected landmark in connection mode
+      if (isConnectionMode && selectedLandmark !== null) {
+        maskRenderer.highlightLandmark(landmarks, canvas.width, canvas.height, selectedLandmark);
+      }
+    }
+    
+    // Hand tracking (runs independently of face detection)
+    if (meshSettings.enableHandTracking && handTracker) {
+      const timestamp = performance.now();
+      const handResults = handTracker.detect(timestamp);
+      
+      if (handResults && handResults.count > 0) {
+        maskRenderer.drawHands(handResults, canvas.width, canvas.height, {
+          showConnections: meshSettings.showHandConnections,
+          showLandmarks: meshSettings.showHandLandmarks,
+          showGesture: meshSettings.showHandGestures,
+          showLabels: meshSettings.showHandLabels,
+          mirrorMode: meshSettings.mirrorVideo
+        });
       }
     }
 
@@ -1103,15 +2025,22 @@ function onFaceResults(results) {
       const modeText = 'Face Swap Active';
       status.textContent = `${modeText} (${landmarks.length} landmarks)`;
     }
-    // Regular mask mode
+    // Regular mask mode - use custom procedural mask
     else if (showMask) {
-      if (webglMaskRenderer && webglMaskRenderer.maskLoaded) {
-        webglMaskRenderer.drawMask(landmarks, canvas.width, canvas.height, 0.6, 0.5);
-      }
-      // Also draw 2D mask as overlay
-      draw2DFaceMask(maskRenderer.ctx, landmarks, canvas.width, canvas.height);
+      // Draw custom procedural mask using current design settings
+      maskRenderer.drawCustomMask(landmarks, canvas.width, canvas.height, maskDesign);
       
-      status.textContent = `Tracking face (${landmarks.length} landmarks)`;
+      // Draw makeup on top of mask
+      if (makeupSettings.enabled) {
+        maskRenderer.drawMakeup(landmarks, canvas.width, canvas.height, makeupSettings);
+      }
+      
+      // Draw accessories
+      if (accessorySettings.enabled && accessorySettings.type !== 'none') {
+        maskRenderer.drawAccessory(landmarks, canvas.width, canvas.height, accessorySettings);
+      }
+      
+      status.textContent = `Mask: ${maskDesign.shape} (${landmarks.length} landmarks)`;
     }
     else {
       // Build expression status string
@@ -1132,6 +2061,11 @@ function onFaceResults(results) {
     if (meshSettings.showFPS) {
       maskRenderer.drawFPS(currentFPS);
     }
+  }
+  
+  // Update recording canvas if recording
+  if (isRecording) {
+    updateRecordingCanvas();
   }
 }
 

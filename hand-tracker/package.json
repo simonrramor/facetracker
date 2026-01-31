@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@mediapipe/camera_utils": "^0.3.1675466862",
-    "@mediapipe/face_mesh": "^0.4.1633559619"
+    "@mediapipe/face_mesh": "^0.4.1633559619",
+    "delaunator": "^5.0.1"
   },
   "devDependencies": {
     "vite": "^5.0.0"
