@@ -87,6 +87,10 @@ const meshSettings = {
   showHandLandmarks: true,
   showHandGestures: true,
   showHandLabels: true,
+  // CRT Effects
+  enableScanLines: true,
+  enableVignette: false,
+  enableHUDFrame: true,
   // Effects
   showExpressions: true,
   showKeyPoints: true,
@@ -538,6 +542,7 @@ function initSettingsControls() {
     'enableHandTracking', 'showHandConnections', 'showHandLandmarks', 
     'showHandGestures', 'showHandLabels',
     'showMoodDetection', 'showEmotionWheel', 'showEmotionBars',
+    'enableScanLines', 'enableVignette', 'enableHUDFrame',
     'showExpressions', 'showKeyPoints', 'pulseEffect',
     'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
   ];
@@ -560,6 +565,17 @@ function initSettingsControls() {
         // Initialize hand tracking when enabled
         if (key === 'enableHandTracking' && e.target.checked) {
           await initializeHandTracking();
+        }
+        
+        // Handle CRT effects
+        if (key === 'enableScanLines') {
+          updateCRTEffects();
+        }
+        if (key === 'enableVignette') {
+          updateCRTEffects();
+        }
+        if (key === 'enableHUDFrame') {
+          updateCRTEffects();
         }
       });
     }
@@ -969,6 +985,33 @@ function applyVideoFilters() {
   video.style.filter = `brightness(${videoBrightness}) contrast(${videoContrast}) saturate(${videoSaturation})`;
 }
 
+// Update CRT visual effects on video wrap
+function updateCRTEffects() {
+  const videoWrap = document.querySelector('.video-wrap');
+  if (!videoWrap) return;
+  
+  // Scan lines - controlled via CSS ::after pseudo-element
+  if (meshSettings.enableScanLines) {
+    videoWrap.classList.add('scan-lines-active');
+  } else {
+    videoWrap.classList.remove('scan-lines-active');
+  }
+  
+  // Vignette effect
+  if (meshSettings.enableVignette) {
+    videoWrap.classList.add('vignette-active');
+  } else {
+    videoWrap.classList.remove('vignette-active');
+  }
+  
+  // HUD frame
+  if (meshSettings.enableHUDFrame) {
+    videoWrap.classList.add('hud-frame-active');
+  } else {
+    videoWrap.classList.remove('hud-frame-active');
+  }
+}
+
 // Initialize recording canvas (composites video + mesh overlay)
 function initRecordingCanvas() {
   recordingCanvas = document.createElement('canvas');
@@ -1154,6 +1197,7 @@ function applyPreset(presetName) {
     'enableHandTracking', 'showHandConnections', 'showHandLandmarks',
     'showHandGestures', 'showHandLabels',
     'showMoodDetection', 'showEmotionWheel', 'showEmotionBars',
+    'enableScanLines', 'enableVignette', 'enableHUDFrame',
     'showExpressions', 'showKeyPoints', 'pulseEffect',
     'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
   ];
@@ -1341,8 +1385,9 @@ async function init() {
       
       // Hide progress bar and show ready message
       if (progressContainer) progressContainer.style.display = 'none';
-      status.textContent = 'Ready! 478 landmarks + 52 expressions';
+      status.textContent = '// READY // 478 LANDMARKS + 52 EXPRESSIONS';
       status.style.color = '#00ff88';
+      status.classList.add('ready');
       
       // Initialize hand tracking if enabled by default
       if (meshSettings.enableHandTracking) {
@@ -1401,6 +1446,9 @@ async function init() {
 
     // Initialize settings controls
     initSettingsControls();
+    
+    // Initialize CRT effects based on default settings
+    updateCRTEffects();
     
     // Initialize new filter controls
     initAccessoryControls();
