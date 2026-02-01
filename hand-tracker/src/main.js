@@ -599,6 +599,94 @@ function findNearestLandmark(clickX, clickY, landmarks, canvasWidth, canvasHeigh
   return nearestIdx;
 }
 
+// Update data panel with real-time tracking values
+function updateDataPanel(landmarks, blendshapes, moodData) {
+  const dataPanel = document.getElementById('dataPanel');
+  if (!dataPanel) return;
+  
+  // Update landmark data
+  const landmarkDiv = document.getElementById('landmarkData');
+  if (landmarkDiv && landmarks && landmarks.length > 0) {
+    const keyPoints = {
+      'Nose Tip': landmarks[1],
+      'Left Eye': landmarks[33],
+      'Right Eye': landmarks[263],
+      'Left Mouth': landmarks[61],
+      'Right Mouth': landmarks[291],
+      'Chin': landmarks[152],
+      'Forehead': landmarks[10],
+      'Left Ear': landmarks[234],
+      'Right Ear': landmarks[454],
+      'Left Iris': landmarks[468],
+      'Right Iris': landmarks[473]
+    };
+    
+    let html = '';
+    for (const [name, point] of Object.entries(keyPoints)) {
+      if (point) {
+        html += `<div class="data-item">
+          <span class="data-label">${name}</span>
+          <span class="data-value">x:${point.x.toFixed(3)} y:${point.y.toFixed(3)} z:${point.z.toFixed(3)}</span>
+        </div>`;
+      }
+    }
+    landmarkDiv.innerHTML = html;
+  }
+  
+  // Update mood data
+  const moodDiv = document.getElementById('moodData');
+  if (moodDiv && moodData) {
+    const valenceClass = moodData.valence > 0 ? 'positive' : moodData.valence < 0 ? 'negative' : '';
+    const arousalClass = moodData.arousal > 0.3 ? 'high' : '';
+    
+    moodDiv.innerHTML = `
+      <div class="data-item">
+        <span class="data-label">Mood</span>
+        <span class="data-value">${moodData.mood}</span>
+      </div>
+      <div class="data-item">
+        <span class="data-label">Dominant</span>
+        <span class="data-value">${moodData.dominantEmotion}</span>
+      </div>
+      <div class="data-item">
+        <span class="data-label">Valence</span>
+        <span class="data-value ${valenceClass}">${moodData.valence.toFixed(3)}</span>
+      </div>
+      <div class="data-item">
+        <span class="data-label">Arousal</span>
+        <span class="data-value ${arousalClass}">${moodData.arousal.toFixed(3)}</span>
+      </div>
+      <div class="data-item">
+        <span class="data-label">Confidence</span>
+        <span class="data-value">${(moodData.confidence * 100).toFixed(1)}%</span>
+      </div>
+    `;
+  }
+  
+  // Update blendshape data
+  const blendshapeDiv = document.getElementById('blendshapeData');
+  if (blendshapeDiv && blendshapes && blendshapes.length > 0 && blendshapes[0].categories) {
+    let html = '';
+    const categories = blendshapes[0].categories;
+    
+    // Sort by score descending
+    const sorted = [...categories].sort((a, b) => b.score - a.score);
+    
+    for (const shape of sorted) {
+      const score = shape.score;
+      const barWidth = Math.min(100, score * 100);
+      const valueClass = score > 0.5 ? 'high' : score > 0.2 ? 'positive' : '';
+      
+      html += `<div class="data-item">
+        <span class="data-label">${shape.categoryName}</span>
+        <span class="data-value ${valueClass}">${score.toFixed(3)}</span>
+        <div class="data-bar"><div class="data-bar-fill" style="width: ${barWidth}%"></div></div>
+      </div>`;
+    }
+    blendshapeDiv.innerHTML = html;
+  }
+}
+
 // Toggle connection mode
 function toggleConnectionMode() {
   isConnectionMode = !isConnectionMode;
@@ -1572,7 +1660,7 @@ async function init() {
     if (clearConnectionsBtn) {
       clearConnectionsBtn.addEventListener('click', clearConnections);
     }
-
+    
     // Initialize settings controls
     initSettingsControls();
     
@@ -2138,9 +2226,10 @@ function onFaceResults(results) {
       }
       
       // Draw mood detection (valence-arousal analysis)
+      let moodData = null;
       if (meshSettings.showMoodDetection && results.expressions && results.expressions.raw) {
         // Analyze mood from raw blendshape scores
-        const moodData = moodAnalyzer.analyze(results.expressions.raw);
+        moodData = moodAnalyzer.analyze(results.expressions.raw);
         
         // Draw mood indicator
         maskRenderer.drawMoodIndicator(moodData, canvas.width, canvas.height, {
@@ -2150,6 +2239,9 @@ function onFaceResults(results) {
           position: 'top-left'  // Put mood on left, expressions on right
         });
       }
+      
+      // Update data panel with all tracked values
+      updateDataPanel(landmarks, results.faceBlendshapes, moodData);
       
       // Draw landmark indices if enabled
       if (meshSettings.showLandmarkIndices) {
