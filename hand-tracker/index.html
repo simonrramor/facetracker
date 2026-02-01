@@ -3,42 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FACE TRACKER // MARATHON STYLE</title>
+    <title>Face Tracker</title>
     <style>
-        /* Marathon-Inspired Visual Theme - "Graphic Realism" */
-        :root {
-            --marathon-green: #00ff88;
-            --marathon-pink: #ff00aa;
-            --marathon-cyan: #00ffff;
-            --marathon-yellow: #f0ff00;
-            --marathon-red: #ff3366;
-            --bg-dark: #0a0a0f;
-            --bg-mid: #0d1117;
-            --bg-panel: #0c0e12;
-            --bg-element: #12161d;
-            --text-primary: #ffffff;
-            --text-secondary: #7a8599;
-            --border-dark: #1a1e26;
-            --border-glow: rgba(0, 255, 136, 0.3);
-        }
-        
+        /* Minimal, performance-focused styles */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
-            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(180deg, var(--bg-dark) 0%, var(--bg-mid) 100%);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #1a1a1a;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 40px;
-            color: var(--text-primary);
+            gap: 20px;
+            color: #fff;
         }
         
         .main-container {
             display: flex;
             align-items: flex-start;
-            gap: 40px;
+            gap: 20px;
         }
         
         .left-panel {
@@ -51,68 +35,17 @@
             position: relative;
             width: 960px;
             height: 540px;
-            border-radius: 4px;
+            background: #000;
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: 
-                0 0 60px rgba(0, 255, 136, 0.1),
-                0 0 120px rgba(0, 255, 255, 0.05),
-                inset 0 0 1px var(--marathon-green);
-            border: 1px solid var(--border-dark);
-        }
-        
-        /* Scan line overlay for video - toggleable */
-        .video-wrap.scan-lines-active::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(0, 0, 0, 0.05) 2px,
-                rgba(0, 0, 0, 0.05) 4px
-            );
-            pointer-events: none;
-            z-index: 50;
-            animation: scan-flicker 0.05s infinite;
-        }
-        
-        @keyframes scan-flicker {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.98; }
-        }
-        
-        /* HUD corner brackets - toggleable */
-        .video-wrap.hud-frame-active::before {
-            content: '';
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            right: 12px;
-            bottom: 12px;
-            border: 1px solid rgba(0, 255, 136, 0.2);
-            pointer-events: none;
-            z-index: 49;
-            box-shadow: inset 0 0 30px rgba(0, 255, 136, 0.03);
-        }
-        
-        /* Vignette effect - toggleable */
-        .video-wrap.vignette-active {
-            box-shadow: 
-                0 0 60px rgba(0, 255, 136, 0.1),
-                0 0 120px rgba(0, 255, 255, 0.05),
-                inset 0 0 100px 30px rgba(0, 0, 0, 0.7);
         }
         
         video {
             display: block;
-            transform: scaleX(-1);
             width: 100%;
             height: 100%;
-            background: var(--bg-dark);
+            transform: scaleX(-1);
+            background: #000;
         }
         
         .video-wrap canvas {
@@ -123,217 +56,121 @@
             height: 100%;
         }
         
-        #webgl-canvas {
-            z-index: 10;
-        }
+        #webgl-canvas { z-index: 10; }
         
         .controls {
-            margin-top: 20px;
+            margin-top: 15px;
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
         
         button {
-            padding: 10px 20px;
+            padding: 8px 16px;
             border: none;
-            border-radius: 2px;
-            background: var(--bg-element);
-            color: var(--text-secondary);
-            border: 1px solid var(--border-dark);
+            border-radius: 6px;
+            background: #333;
+            color: #fff;
             cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            font-size: 12px;
-            letter-spacing: 1px;
-            font-weight: 500;
+            font-size: 13px;
         }
+        button:hover { background: #444; }
+        button.active { background: #4CAF50; }
         
-        button:hover { 
-            background: #1a1e26;
-            color: var(--text-primary);
-            border-color: var(--marathon-green);
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
-        }
-        
-        button.active { 
-            background: rgba(0, 255, 136, 0.1);
-            color: var(--marathon-green);
-            border-color: var(--marathon-green);
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
-        }
-        
-        .record-btn { background: var(--bg-element); }
         .record-btn::before {
             content: '';
             display: inline-block;
             width: 8px;
             height: 8px;
-            background: var(--marathon-red);
+            background: #f44;
             border-radius: 50%;
-            margin-right: 8px;
-            box-shadow: 0 0 10px var(--marathon-red);
+            margin-right: 6px;
         }
-        
-        .record-btn.recording {
-            background: rgba(255, 51, 102, 0.2);
-            border-color: var(--marathon-red);
-            color: var(--marathon-red);
-            animation: pulse-record 1s infinite;
-        }
-        
-        .record-btn.recording::before {
-            background: var(--marathon-red);
-            border-radius: 2px;
-            width: 8px;
-            height: 8px;
-        }
-        
-        @keyframes pulse-record {
-            0%, 100% { opacity: 1; box-shadow: 0 0 20px rgba(255, 51, 102, 0.3); }
-            50% { opacity: 0.8; box-shadow: 0 0 30px rgba(255, 51, 102, 0.5); }
-        }
-        
-        @keyframes neon-pulse {
-            0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 136, 0.3); }
-            50% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.5); }
-        }
-        
-        @keyframes glitch-flicker {
-            0%, 100% { opacity: 1; }
-            92% { opacity: 1; }
-            93% { opacity: 0.8; transform: translateX(1px); }
-            94% { opacity: 1; transform: translateX(0); }
-            95% { opacity: 0.9; transform: translateX(-1px); }
-            96% { opacity: 1; transform: translateX(0); }
-        }
+        .record-btn.recording { background: #f44; }
         
         #status {
-            margin-top: 20px;
-            padding: 10px 24px;
-            background: var(--bg-panel);
-            border-radius: 2px;
-            color: var(--text-secondary);
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            border: 1px solid var(--border-dark);
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: #222;
+            border-radius: 6px;
+            color: #888;
+            font-size: 13px;
         }
         
         .progress-container {
             width: 200px;
             height: 4px;
-            background: var(--bg-element);
-            border-radius: 0;
+            background: #333;
+            border-radius: 2px;
             margin-top: 10px;
             overflow: hidden;
             display: none;
-            border: 1px solid var(--border-dark);
         }
         
         .progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, var(--marathon-green), var(--marathon-cyan));
+            background: #4CAF50;
             width: 0%;
-            transition: width 0.2s ease;
-            box-shadow: 0 0 10px var(--marathon-green);
         }
         
-        .upload-section {
-            display: none;
-        }
+        .upload-section { display: none; }
         
-        /* Settings Panel - Marathon Style */
+        /* Settings Panel */
         .settings-panel {
-            background: var(--bg-panel);
-            border-radius: 4px;
-            padding: 24px;
-            width: 300px;
-            max-height: 540px;
+            background: #222;
+            border-radius: 8px;
+            padding: 20px;
+            width: 280px;
+            max-height: 600px;
             overflow-y: auto;
-            border: 1px solid var(--border-dark);
-            box-shadow: 
-                0 0 40px rgba(0, 0, 0, 0.5),
-                inset 0 0 1px rgba(0, 255, 136, 0.1);
         }
         
-        .settings-panel::-webkit-scrollbar {
-            width: 4px;
-        }
-        
-        .settings-panel::-webkit-scrollbar-track {
-            background: var(--bg-dark);
-        }
-        
-        .settings-panel::-webkit-scrollbar-thumb {
-            background: var(--marathon-green);
-            opacity: 0.5;
-        }
-        
-        .settings-panel::-webkit-scrollbar-thumb:hover {
-            background: var(--marathon-cyan);
-        }
+        .settings-panel::-webkit-scrollbar { width: 6px; }
+        .settings-panel::-webkit-scrollbar-track { background: #1a1a1a; }
+        .settings-panel::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         
         .settings-panel h3 {
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            color: var(--marathon-green);
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border-dark);
-            font-weight: 600;
-        }
-        
-        .settings-panel h3::before {
-            content: '// ';
-            color: var(--text-secondary);
+            color: #888;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #333;
         }
         
         .setting-group {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
         
         .setting-group label {
             display: block;
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 6px;
         }
         
         .setting-group input[type="range"] {
             width: 100%;
             height: 4px;
-            border-radius: 0;
-            background: var(--bg-element);
+            background: #333;
             outline: none;
             -webkit-appearance: none;
-            border: 1px solid var(--border-dark);
+            border-radius: 2px;
         }
         
         .setting-group input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             width: 14px;
             height: 14px;
-            border-radius: 0;
-            background: var(--marathon-green);
+            border-radius: 50%;
+            background: #4CAF50;
             cursor: pointer;
-            border: none;
-            box-shadow: 0 0 10px var(--marathon-green);
-        }
-        
-        .setting-group input[type="range"]::-webkit-slider-thumb:hover {
-            background: var(--marathon-cyan);
-            box-shadow: 0 0 15px var(--marathon-cyan);
         }
         
         .setting-value {
-            font-size: 10px;
-            color: var(--marathon-green);
+            font-size: 11px;
+            color: #666;
             text-align: right;
             margin-top: 4px;
-            font-family: 'SF Mono', 'Monaco', monospace;
         }
         
         .setting-group input[type="checkbox"] {
@@ -347,74 +184,48 @@
             cursor: pointer;
         }
         
-        .toggle-switch span {
-            font-size: 11px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        .toggle-switch span { font-size: 12px; color: #aaa; }
         
         .toggle-switch .toggle-track {
             width: 36px;
             height: 18px;
-            background: var(--bg-element);
-            border-radius: 2px;
+            background: #333;
+            border-radius: 9px;
             position: relative;
-            transition: all 0.2s;
-            border: 1px solid var(--border-dark);
         }
         
         .toggle-switch .toggle-thumb {
-            width: 12px;
-            height: 12px;
-            background: var(--text-secondary);
-            border-radius: 1px;
+            width: 14px;
+            height: 14px;
+            background: #666;
+            border-radius: 50%;
             position: absolute;
             top: 2px;
             left: 2px;
-            transition: all 0.2s;
+            transition: left 0.2s;
         }
         
         .setting-group input[type="checkbox"]:checked + .toggle-switch .toggle-track {
-            background: rgba(0, 255, 136, 0.2);
-            border-color: var(--marathon-green);
-            box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+            background: #4CAF50;
         }
         
         .setting-group input[type="checkbox"]:checked + .toggle-switch .toggle-thumb {
             left: 20px;
-            background: var(--marathon-green);
-            box-shadow: 0 0 8px var(--marathon-green);
+            background: #fff;
         }
         
         .color-picker-wrap {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
         
         .color-picker-wrap input[type="color"] {
             width: 36px;
             height: 24px;
             border: none;
-            border-radius: 2px;
+            border-radius: 4px;
             cursor: pointer;
-            background: transparent;
-        }
-        
-        .color-picker-wrap input[type="color"]::-webkit-color-swatch-wrapper {
-            padding: 0;
-        }
-        
-        .color-picker-wrap input[type="color"]::-webkit-color-swatch {
-            border-radius: 2px;
-            border: 1px solid var(--border-dark);
-        }
-        
-        .color-picker-wrap span {
-            font-family: 'SF Mono', 'Monaco', monospace;
-            font-size: 10px;
-            color: var(--marathon-green);
         }
         
         .preset-buttons {
@@ -425,175 +236,30 @@
         }
         
         .preset-btn {
-            padding: 6px 12px;
-            font-size: 10px;
-            background: var(--bg-element);
-            border: 1px solid var(--border-dark);
-            border-radius: 2px;
-            color: var(--text-secondary);
+            padding: 5px 10px;
+            font-size: 11px;
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #aaa;
             cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
         }
-        
-        .preset-btn:hover {
-            background: #1a1e26;
-            color: var(--marathon-green);
-            border-color: var(--marathon-green);
-        }
-        
-        .preset-btn.active {
-            background: rgba(0, 255, 136, 0.15);
-            border-color: var(--marathon-green);
-            color: var(--marathon-green);
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
-        }
+        .preset-btn:hover { background: #444; }
+        .preset-btn.active { background: #4CAF50; color: #fff; border-color: #4CAF50; }
         
         .setting-select {
             width: 100%;
-            padding: 8px 12px;
-            background: var(--bg-element);
-            border: 1px solid var(--border-dark);
-            border-radius: 2px;
-            color: var(--text-primary);
-            font-size: 11px;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
             cursor: pointer;
-            outline: none;
-            text-transform: uppercase;
-            letter-spacing: 1px;
         }
         
-        .setting-select:hover {
-            border-color: var(--marathon-green);
-        }
-        
-        .setting-select:focus {
-            border-color: var(--marathon-green);
-            box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
-        }
-        
-        .setting-select option {
-            background: var(--bg-panel);
-            color: var(--text-primary);
-        }
-        
-        /* Glitch Text Effect */
-        .glitch-text {
-            position: relative;
-            animation: glitch-flicker 4s infinite;
-        }
-        
-        .glitch-text::before,
-        .glitch-text::after {
-            content: attr(data-text);
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        
-        .glitch-text::before {
-            color: var(--marathon-pink);
-            animation: glitch-offset 0.3s infinite;
-            clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
-            opacity: 0.8;
-        }
-        
-        .glitch-text::after {
-            color: var(--marathon-cyan);
-            animation: glitch-offset 0.3s infinite reverse;
-            clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
-            opacity: 0.8;
-        }
-        
-        @keyframes glitch-offset {
-            0%, 100% { transform: translate(0); }
-            20% { transform: translate(-2px, 1px); }
-            40% { transform: translate(2px, -1px); }
-            60% { transform: translate(-1px, 2px); }
-            80% { transform: translate(1px, -2px); }
-        }
-        
-        /* Chromatic Aberration Effect */
-        .chromatic {
-            text-shadow: 
-                -1px 0 var(--marathon-pink),
-                1px 0 var(--marathon-cyan);
-            animation: chromatic-shift 3s infinite;
-        }
-        
-        @keyframes chromatic-shift {
-            0%, 100% { text-shadow: -1px 0 var(--marathon-pink), 1px 0 var(--marathon-cyan); }
-            25% { text-shadow: -2px 0 var(--marathon-pink), 2px 0 var(--marathon-cyan); }
-            50% { text-shadow: 1px 0 var(--marathon-pink), -1px 0 var(--marathon-cyan); }
-            75% { text-shadow: 2px 0 var(--marathon-pink), -2px 0 var(--marathon-cyan); }
-        }
-        
-        /* CRT Scan Line Effect */
-        .crt-effect::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: 
-                repeating-linear-gradient(
-                    0deg,
-                    transparent,
-                    transparent 1px,
-                    rgba(0, 0, 0, 0.15) 1px,
-                    rgba(0, 0, 0, 0.15) 2px
-                );
-            pointer-events: none;
-            z-index: 100;
-            animation: scan-move 8s linear infinite;
-        }
-        
-        @keyframes scan-move {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(4px); }
-        }
-        
-        /* Neon Border Glow */
-        .neon-border {
-            border: 1px solid var(--marathon-green);
-            box-shadow: 
-                0 0 5px var(--marathon-green),
-                0 0 10px rgba(0, 255, 136, 0.3),
-                inset 0 0 5px rgba(0, 255, 136, 0.1);
-        }
-        
-        /* Data Stream Effect */
-        .data-stream::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, 
-                transparent 0%,
-                var(--marathon-green) 50%,
-                transparent 100%
-            );
-            animation: data-scan 3s linear infinite;
-        }
-        
-        @keyframes data-scan {
-            0% { transform: translateY(0); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { transform: translateY(540px); opacity: 0; }
-        }
-        
-        /* Status indicator styling */
-        #status.ready {
-            color: var(--marathon-green);
-            animation: neon-pulse 2s ease-in-out infinite;
-        }
+        .setting-select:hover { border-color: #4CAF50; }
+        .setting-select option { background: #333; }
     </style>
 </head>
 <body>
@@ -956,32 +622,6 @@
                 <label>Video Saturation</label>
                 <input type="range" id="videoSaturation" min="0" max="2" step="0.1" value="1">
                 <div class="setting-value" id="videoSaturationValue">100%</div>
-            </div>
-            
-            <h3>CRT Effects</h3>
-            
-            <div class="setting-group">
-                <input type="checkbox" id="enableScanLines" checked>
-                <label class="toggle-switch" for="enableScanLines">
-                    <span>Scan Lines</span>
-                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
-                </label>
-            </div>
-            
-            <div class="setting-group">
-                <input type="checkbox" id="enableVignette">
-                <label class="toggle-switch" for="enableVignette">
-                    <span>Vignette</span>
-                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
-                </label>
-            </div>
-            
-            <div class="setting-group">
-                <input type="checkbox" id="enableHUDFrame" checked>
-                <label class="toggle-switch" for="enableHUDFrame">
-                    <span>HUD Frame</span>
-                    <div class="toggle-track"><div class="toggle-thumb"></div></div>
-                </label>
             </div>
             
             <h3>Display</h3>

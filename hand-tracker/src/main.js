@@ -87,10 +87,6 @@ const meshSettings = {
   showHandLandmarks: true,
   showHandGestures: true,
   showHandLabels: true,
-  // CRT Effects
-  enableScanLines: true,
-  enableVignette: false,
-  enableHUDFrame: true,
   // Effects
   showExpressions: true,
   showKeyPoints: true,
@@ -382,12 +378,153 @@ function calculateVideoTransform(videoWidth, videoHeight, displayWidth, displayH
   };
 }
 
-// Transform landmarks - mirror only, no symmetry correction
-// The asymmetry is inherent in MediaPipe's detection based on face angle/camera
-function transformLandmarksSimple(landmarks, transform) {
+// === Content Bounds Detection for Virtual Camera Compatibility ===
+// Camo Camera and other virtual cameras may add letterboxing (black bars)
+// which causes MediaPipe coordinates to not match the displayed video
+
+// Cached content bounds to avoid detecting every frame
+let cachedContentBounds = null;
+let contentBoundsCacheTime = 0;
+const CONTENT_BOUNDS_CACHE_MS = 5000; // Re-detect every 5 seconds
+
+// Check if a pixel is "black" (within threshold for letterbox detection)
+function isPixelBlack(data, index, threshold = 30) {
+  return data[index] < threshold && 
+         data[index + 1] < threshold && 
+         data[index + 2] < threshold;
+}
+
+// Check if an entire row is mostly black (letterbox bar)
+function isRowBlack(data, y, width, threshold = 30, minBlackRatio = 0.9) {
+  let blackCount = 0;
+  for (let x = 0; x < width; x++) {
+    const index = (y * width + x) * 4;
+    if (isPixelBlack(data, index, threshold)) blackCount++;
+  }
+  return blackCount / width >= minBlackRatio;
+}
+
+// Check if an entire column is mostly black (letterbox bar)
+function isColBlack(data, x, width, height, threshold = 30, minBlackRatio = 0.9) {
+  let blackCount = 0;
+  for (let y = 0; y < height; y++) {
+    const index = (y * width + x) * 4;
+    if (isPixelBlack(data, index, threshold)) blackCount++;
+  }
+  return blackCount / height >= minBlackRatio;
+}
+
+// Detect the actual content bounds within the video frame
+// Returns { top, bottom, left, right } in pixels
+function detectContentBounds(video) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  
+  try {
+    ctx.drawImage(video, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Detect top edge (first non-black row)
+    let top = 0;
+    for (let y = 0; y < height; y++) {
+      if (!isRowBlack(data, y, width)) {
+        top = y;
+        break;
+      }
+    }
+    
+    // Detect bottom edge (last non-black row)
+    let bottom = height;
+    for (let y = height - 1; y >= 0; y--) {
+      if (!isRowBlack(data, y, width)) {
+        bottom = y + 1;
+        break;
+      }
+    }
+    
+    // Detect left edge (first non-black column)
+    let left = 0;
+    for (let x = 0; x < width; x++) {
+      if (!isColBlack(data, x, width, height)) {
+        left = x;
+        break;
+      }
+    }
+    
+    // Detect right edge (last non-black column)
+    let right = width;
+    for (let x = width - 1; x >= 0; x--) {
+      if (!isColBlack(data, x, width, height)) {
+        right = x + 1;
+        break;
+      }
+    }
+    
+    console.log('Detected content bounds:', { top, bottom, left, right, width, height });
+    return { top, bottom, left, right, width, height };
+  } catch (e) {
+    console.warn('Failed to detect content bounds:', e);
+    // Return full frame if detection fails
+    return { top: 0, bottom: canvas.height, left: 0, right: canvas.width, width: canvas.width, height: canvas.height };
+  }
+}
+
+// Get cached content bounds, re-detecting periodically
+function getContentBounds(video) {
+  const now = Date.now();
+  if (!cachedContentBounds || (now - contentBoundsCacheTime) > CONTENT_BOUNDS_CACHE_MS) {
+    cachedContentBounds = detectContentBounds(video);
+    contentBoundsCacheTime = now;
+  }
+  return cachedContentBounds;
+}
+
+// Transform landmarks with dynamic calibration based on video track settings
+function transformLandmarksSimple(landmarks, transform, videoElement) {
+  // Get actual video track dimensions vs reported dimensions
+  let scaleX = 1, scaleY = 1, offsetY = 0;
+  
+  if (videoElement && videoElement.srcObject) {
+    const track = videoElement.srcObject.getVideoTracks()[0];
+    if (track) {
+      const settings = track.getSettings();
+      const reportedWidth = videoElement.videoWidth;
+      const reportedHeight = videoElement.videoHeight;
+      const actualWidth = settings.width || reportedWidth;
+      const actualHeight = settings.height || reportedHeight;
+      
+      // Calculate scale factors if there's a mismatch
+      if (actualWidth !== reportedWidth || actualHeight !== reportedHeight) {
+        scaleX = reportedWidth / actualWidth;
+        scaleY = reportedHeight / actualHeight;
+        console.log('Video dimension mismatch detected:', {
+          reported: { w: reportedWidth, h: reportedHeight },
+          actual: { w: actualWidth, h: actualHeight },
+          scale: { x: scaleX, y: scaleY }
+        });
+      }
+      
+      // Check for aspect ratio mismatch (virtual camera cropping)
+      const reportedAspect = reportedWidth / reportedHeight;
+      const actualAspect = actualWidth / actualHeight;
+      if (Math.abs(reportedAspect - actualAspect) > 0.01) {
+        // Aspect ratio mismatch - calculate Y offset for top/bottom cropping
+        const expectedHeight = reportedWidth / actualAspect;
+        offsetY = (expectedHeight - reportedHeight) / (2 * expectedHeight);
+        console.log('Aspect ratio mismatch - Y offset:', offsetY);
+      }
+    }
+  }
+  
+  // Apply X-flip for CSS-mirrored video, and any detected scale/offset corrections
   return landmarks.map(lm => ({
-    x: 1 - lm.x,
-    y: lm.y,
+    x: 1 - (lm.x * scaleX),
+    y: (lm.y * scaleY) - offsetY,
     z: lm.z
   }));
 }
@@ -542,7 +679,6 @@ function initSettingsControls() {
     'enableHandTracking', 'showHandConnections', 'showHandLandmarks', 
     'showHandGestures', 'showHandLabels',
     'showMoodDetection', 'showEmotionWheel', 'showEmotionBars',
-    'enableScanLines', 'enableVignette', 'enableHUDFrame',
     'showExpressions', 'showKeyPoints', 'pulseEffect',
     'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
   ];
@@ -567,16 +703,6 @@ function initSettingsControls() {
           await initializeHandTracking();
         }
         
-        // Handle CRT effects
-        if (key === 'enableScanLines') {
-          updateCRTEffects();
-        }
-        if (key === 'enableVignette') {
-          updateCRTEffects();
-        }
-        if (key === 'enableHUDFrame') {
-          updateCRTEffects();
-        }
       });
     }
   });
@@ -985,32 +1111,6 @@ function applyVideoFilters() {
   video.style.filter = `brightness(${videoBrightness}) contrast(${videoContrast}) saturate(${videoSaturation})`;
 }
 
-// Update CRT visual effects on video wrap
-function updateCRTEffects() {
-  const videoWrap = document.querySelector('.video-wrap');
-  if (!videoWrap) return;
-  
-  // Scan lines - controlled via CSS ::after pseudo-element
-  if (meshSettings.enableScanLines) {
-    videoWrap.classList.add('scan-lines-active');
-  } else {
-    videoWrap.classList.remove('scan-lines-active');
-  }
-  
-  // Vignette effect
-  if (meshSettings.enableVignette) {
-    videoWrap.classList.add('vignette-active');
-  } else {
-    videoWrap.classList.remove('vignette-active');
-  }
-  
-  // HUD frame
-  if (meshSettings.enableHUDFrame) {
-    videoWrap.classList.add('hud-frame-active');
-  } else {
-    videoWrap.classList.remove('hud-frame-active');
-  }
-}
 
 // Initialize recording canvas (composites video + mesh overlay)
 function initRecordingCanvas() {
@@ -1197,7 +1297,6 @@ function applyPreset(presetName) {
     'enableHandTracking', 'showHandConnections', 'showHandLandmarks',
     'showHandGestures', 'showHandLabels',
     'showMoodDetection', 'showEmotionWheel', 'showEmotionBars',
-    'enableScanLines', 'enableVignette', 'enableHUDFrame',
     'showExpressions', 'showKeyPoints', 'pulseEffect',
     'mirrorVideo', 'showVideo', 'showFPS', 'showLandmarkIndices'
   ];
@@ -1287,18 +1386,50 @@ async function init() {
   }
 
   try {
-    // Canvas matches video-wrap size (960x540, 16:9 landscape)
-    const displayWidth = 960;
-    const displayHeight = 540;
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
-    console.log('Canvas set to display size:', canvas.width, 'x', canvas.height);
-    console.log('Video actual size:', video.videoWidth, 'x', video.videoHeight);
+    // Get actual video dimensions from the camera stream
+    const actualVideoWidth = video.videoWidth;
+    const actualVideoHeight = video.videoHeight;
+    console.log('Video actual size:', actualVideoWidth, 'x', actualVideoHeight);
     
-    // Calculate coordinate transformation for object-fit: cover
+    // Calculate display size for the container
+    const maxWidth = 960;
+    const maxHeight = 700;
+    const videoAspect = actualVideoWidth / actualVideoHeight;
+    
+    let displayWidth, displayHeight;
+    if (actualVideoWidth / maxWidth > actualVideoHeight / maxHeight) {
+      displayWidth = maxWidth;
+      displayHeight = Math.round(maxWidth / videoAspect);
+    } else {
+      displayHeight = maxHeight;
+      displayWidth = Math.round(maxHeight * videoAspect);
+    }
+    
+    // Set canvas to match video dimensions for 1:1 coordinate mapping
+    canvas.width = actualVideoWidth;
+    canvas.height = actualVideoHeight;
+    
+    // Store scale factors for coordinate transformation
+    window.videoScaleX = displayWidth / actualVideoWidth;
+    window.videoScaleY = displayHeight / actualVideoHeight;
+    
+    // Update the video-wrap container size
+    const videoWrap = document.querySelector('.video-wrap');
+    if (videoWrap) {
+      videoWrap.style.width = displayWidth + 'px';
+      videoWrap.style.height = displayHeight + 'px';
+    }
+    
+    console.log('Video actual:', actualVideoWidth, 'x', actualVideoHeight);
+    console.log('Canvas/Display:', canvas.width, 'x', canvas.height);
+    console.log('Scale factors:', window.videoScaleX, window.videoScaleY);
+    
+    status.textContent = `Video: ${actualVideoWidth}x${actualVideoHeight} | Canvas: ${displayWidth}x${displayHeight}`;
+    
+    // No transform needed - canvas matches video exactly
     window.videoTransform = calculateVideoTransform(
-      video.videoWidth, video.videoHeight,
-      displayWidth, displayHeight
+      actualVideoWidth, actualVideoHeight,
+      actualVideoWidth, actualVideoHeight  // Same dimensions = no transform
     );
     console.log('Video transform:', window.videoTransform);
 
@@ -1307,11 +1438,10 @@ async function init() {
     console.log('2D mask renderer created');
     
     // Set up click handler for custom mesh connections
-    setupCanvasClickHandler(canvas, displayWidth, displayHeight);
+    setupCanvasClickHandler(canvas, actualVideoWidth, actualVideoHeight);
 
     // Create WebGL canvas for 3D mask rendering
     status.textContent = 'Setting up WebGL...';
-    const videoWrap = document.querySelector('.video-wrap');
     console.log('Video wrap element:', videoWrap);
     console.log('Video wrap children before:', videoWrap.children.length);
     
@@ -1324,8 +1454,8 @@ async function init() {
     
     const webglCanvas = document.createElement('canvas');
     webglCanvas.id = 'webgl-canvas';
-    webglCanvas.width = displayWidth;
-    webglCanvas.height = displayHeight;
+    webglCanvas.width = actualVideoWidth;
+    webglCanvas.height = actualVideoHeight;
     // Use same styling as the 2D canvas
     webglCanvas.style.position = 'absolute';
     webglCanvas.style.top = '0';
@@ -1385,9 +1515,8 @@ async function init() {
       
       // Hide progress bar and show ready message
       if (progressContainer) progressContainer.style.display = 'none';
-      status.textContent = '// READY // 478 LANDMARKS + 52 EXPRESSIONS';
-      status.style.color = '#00ff88';
-      status.classList.add('ready');
+      status.textContent = 'Ready - 478 landmarks + 52 expressions';
+      status.style.color = '#4CAF50';
       
       // Initialize hand tracking if enabled by default
       if (meshSettings.enableHandTracking) {
@@ -1447,8 +1576,6 @@ async function init() {
     // Initialize settings controls
     initSettingsControls();
     
-    // Initialize CRT effects based on default settings
-    updateCRTEffects();
     
     // Initialize new filter controls
     initAccessoryControls();
@@ -1933,7 +2060,8 @@ function onFaceResults(results) {
 
   if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
     const rawLandmarks = results.multiFaceLandmarks[0];
-    let landmarks = transformLandmarksSimple(rawLandmarks, window.videoTransform);
+    
+    let landmarks = transformLandmarksSimple(rawLandmarks, window.videoTransform, video);
     
     // Store current landmarks for click detection in connection mode
     currentLandmarks = landmarks;

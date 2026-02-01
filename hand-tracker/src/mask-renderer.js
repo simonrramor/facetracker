@@ -2179,9 +2179,9 @@ export class MaskRenderer {
         y: rightCenter.y - rightEyeCenter.y
       };
 
-      // Draw gaze lines extending from each iris - Marathon pink
+      // Draw gaze lines extending from each iris
       this.ctx.globalAlpha = 0.8;
-      this.ctx.strokeStyle = '#ff00aa';
+      this.ctx.strokeStyle = '#ff00ff';
       this.ctx.lineWidth = 2;
       this.ctx.lineCap = 'round';
 
@@ -2208,7 +2208,7 @@ export class MaskRenderer {
           const arrowY = irisCenter.y + dirY * gazeLength * (magnitude * 3);
           const arrowSize = 6;
           
-          this.ctx.fillStyle = '#ff00aa';  // Marathon pink
+          this.ctx.fillStyle = '#ff00ff';
           this.ctx.beginPath();
           this.ctx.moveTo(arrowX, arrowY);
           this.ctx.lineTo(arrowX - dirX * arrowSize - dirY * arrowSize * 0.5, 
@@ -2259,36 +2259,35 @@ export class MaskRenderer {
     // Collect detected expressions
     const detectedExpressions = [];
 
-    // Marathon-style expression colors
     if (expressions.smiling) {
-      detectedExpressions.push({ text: 'SMILING', color: '#00ff88', intensity: expressions.smileAmount });  // Green
+      detectedExpressions.push({ text: 'Smiling', color: '#FFD700', intensity: expressions.smileAmount });
     }
     if (expressions.mouthOpen) {
-      detectedExpressions.push({ text: 'MOUTH OPEN', color: '#ff00aa', intensity: expressions.mouthOpenAmount });  // Pink
+      detectedExpressions.push({ text: 'Mouth Open', color: '#FF6B6B', intensity: expressions.mouthOpenAmount });
     }
     if (expressions.surprised) {
-      detectedExpressions.push({ text: 'SURPRISED', color: '#f0ff00', intensity: expressions.browRaiseAmount });  // Yellow
+      detectedExpressions.push({ text: 'Surprised', color: '#00BFFF', intensity: expressions.browRaiseAmount });
     }
     if (expressions.bothEyesClosed) {
-      detectedExpressions.push({ text: 'EYES CLOSED', color: '#00ffff', intensity: 1 });  // Cyan
+      detectedExpressions.push({ text: 'Eyes Closed', color: '#9370DB', intensity: 1 });
     } else if (expressions.leftEyeClosed && !expressions.rightEyeClosed) {
-      detectedExpressions.push({ text: 'LEFT WINK', color: '#ff00aa', intensity: 1 });  // Pink
+      detectedExpressions.push({ text: 'Left Wink', color: '#FF69B4', intensity: 1 });
     } else if (expressions.rightEyeClosed && !expressions.leftEyeClosed) {
-      detectedExpressions.push({ text: 'RIGHT WINK', color: '#ff00aa', intensity: 1 });  // Pink
+      detectedExpressions.push({ text: 'Right Wink', color: '#FF69B4', intensity: 1 });
     }
     if (expressions.cheeksPuffed) {
-      detectedExpressions.push({ text: 'CHEEKS PUFFED', color: '#00cc88', intensity: 1 });  // Muted green
+      detectedExpressions.push({ text: 'Cheeks Puffed', color: '#98FB98', intensity: 1 });
     }
     if (expressions.mouthPucker) {
-      detectedExpressions.push({ text: 'PUCKERING', color: '#ff00aa', intensity: 1 });  // Pink
+      detectedExpressions.push({ text: 'Puckering', color: '#FF1493', intensity: 1 });
     }
     if (expressions.leftEyebrowRaised || expressions.rightEyebrowRaised) {
       const side = expressions.leftEyebrowRaised && expressions.rightEyebrowRaised ? '' : 
-                   expressions.leftEyebrowRaised ? 'LEFT ' : 'RIGHT ';
-      detectedExpressions.push({ text: `${side}BROW RAISED`, color: '#00ffff', intensity: expressions.browRaiseAmount });  // Cyan
+                   expressions.leftEyebrowRaised ? 'Left ' : 'Right ';
+      detectedExpressions.push({ text: `${side}Brow Raised`, color: '#00CED1', intensity: expressions.browRaiseAmount });
     }
 
-    // Draw expression labels in top right corner - Marathon style
+    // Draw expression labels in top right corner
     if (detectedExpressions.length > 0) {
       const startX = canvasWidth - 20;
       const startY = 25;
@@ -2300,21 +2299,14 @@ export class MaskRenderer {
       detectedExpressions.forEach((expr, index) => {
         const y = startY + index * lineHeight;
         
-        // Background pill - Marathon dark style
-        this.ctx.font = 'bold 11px sans-serif';
+        // Background pill
+        this.ctx.font = 'bold 14px sans-serif';
         const textWidth = this.ctx.measureText(expr.text).width;
         
-        this.ctx.fillStyle = 'rgba(10, 10, 15, 0.85)';
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         this.ctx.beginPath();
-        this.ctx.roundRect(startX - textWidth - 18, y - 4, textWidth + 22, 22, 2);
+        this.ctx.roundRect(startX - textWidth - 16, y - 4, textWidth + 20, 24, 12);
         this.ctx.fill();
-        
-        // Border glow
-        this.ctx.strokeStyle = expr.color;
-        this.ctx.lineWidth = 1;
-        this.ctx.globalAlpha = 0.5;
-        this.ctx.stroke();
-        this.ctx.globalAlpha = 1;
         
         // Colored indicator dot
         this.ctx.fillStyle = expr.color;
@@ -2382,10 +2374,10 @@ export class MaskRenderer {
     if (!landmarks || !connections || connections.length === 0) return;
     
     this.ctx.save();
-    this.ctx.strokeStyle = '#ff00aa';  // Marathon pink for custom connections
+    this.ctx.strokeStyle = '#ff00ff';
     this.ctx.lineWidth = 3;
     this.ctx.lineCap = 'round';
-    this.ctx.shadowColor = '#ff00aa';
+    this.ctx.shadowColor = '#ff00ff';
     this.ctx.shadowBlur = 8;
     
     for (const [idx1, idx2] of connections) {
@@ -2405,7 +2397,7 @@ export class MaskRenderer {
       this.ctx.stroke();
       
       // Draw small circles at endpoints
-      this.ctx.fillStyle = '#ff00aa';  // Marathon pink
+      this.ctx.fillStyle = '#ff00ff';
       this.ctx.beginPath();
       this.ctx.arc(x1, y1, 4, 0, Math.PI * 2);
       this.ctx.fill();
@@ -2477,30 +2469,12 @@ export class MaskRenderer {
 
     this.ctx.save();
 
-    // Marathon-style mood colors based on valence-arousal
+    // Mood colors based on valence-arousal
     const getMoodColor = (v, a) => {
-      // Use Marathon color palette for mood quadrants
-      // Q1 (positive/high arousal) = green/yellow
-      // Q2 (negative/high arousal) = pink/red
-      // Q3 (negative/low arousal) = cyan/blue
-      // Q4 (positive/low arousal) = cyan/green
-      
-      if (v > 0 && a > 0) {
-        // Happy/Excited - Marathon green to yellow
-        const mix = Math.min(1, (v + a) / 1.5);
-        return mix > 0.5 ? '#f0ff00' : '#00ff88';
-      } else if (v < 0 && a > 0) {
-        // Angry/Stressed - Marathon pink/red
-        return '#ff00aa';
-      } else if (v < 0 && a < 0) {
-        // Sad/Bored - cyan/blue
-        return '#00ffff';
-      } else if (v > 0 && a < 0) {
-        // Calm/Relaxed - muted green
-        return '#00cc88';
-      }
-      // Neutral - white
-      return '#888899';
+      const hue = ((v + 1) / 2) * 120;
+      const saturation = 60 + Math.abs(a) * 40;
+      const lightness = 40 + (a + 1) * 15;
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
     };
 
     const moodColor = getMoodColor(valence, arousal);
@@ -2602,12 +2576,12 @@ export class MaskRenderer {
       this.ctx.arc(wheelX, wheelY, wheelSize / 2 + 8, 0, Math.PI * 2);
       this.ctx.fill();
       
-      // Marathon-style quadrant colors
+      // Quadrant colors (subtle)
       const quadrantColors = [
-        { color: 'rgba(0, 255, 136, 0.2)', startAngle: -Math.PI / 2, endAngle: 0 },           // Q1: Happy - Marathon green
-        { color: 'rgba(255, 0, 170, 0.2)', startAngle: -Math.PI, endAngle: -Math.PI / 2 },    // Q2: Angry - Marathon pink
-        { color: 'rgba(0, 255, 255, 0.15)', startAngle: Math.PI / 2, endAngle: Math.PI },     // Q3: Sad - Marathon cyan
-        { color: 'rgba(0, 200, 136, 0.15)', startAngle: 0, endAngle: Math.PI / 2 }            // Q4: Calm - muted green
+        { color: 'rgba(100, 255, 100, 0.15)', startAngle: -Math.PI / 2, endAngle: 0 },
+        { color: 'rgba(255, 100, 100, 0.15)', startAngle: -Math.PI, endAngle: -Math.PI / 2 },
+        { color: 'rgba(100, 100, 255, 0.15)', startAngle: Math.PI / 2, endAngle: Math.PI },
+        { color: 'rgba(100, 255, 255, 0.15)', startAngle: 0, endAngle: Math.PI / 2 }
       ];
       
       for (const q of quadrantColors) {
@@ -2686,14 +2660,13 @@ export class MaskRenderer {
       const barSpacing = 16;
       
       const emotionList = ['happy', 'sad', 'angry', 'fear', 'surprise', 'disgust'];
-      // Marathon-style emotion colors
       const emotionColors = {
-        happy: '#00ff88',     // Marathon green
-        sad: '#00ffff',       // Marathon cyan
-        angry: '#ff00aa',     // Marathon pink
-        fear: '#ff00aa',      // Marathon pink (lighter)
-        surprise: '#f0ff00',  // Marathon yellow
-        disgust: '#00cc88'    // Muted green
+        happy: '#FFD700',
+        sad: '#6495ED',
+        angry: '#FF4444',
+        fear: '#9370DB',
+        surprise: '#00CED1',
+        disgust: '#98FB98'
       };
       
       this.ctx.font = '10px sans-serif';
@@ -2755,8 +2728,8 @@ export class MaskRenderer {
       showGesture = true,
       connectionColor = '#00ff88',
       landmarkColor = '#ffffff',
-      leftHandColor = '#ff00aa',   // Marathon hot pink
-      rightHandColor = '#00ffff',  // Marathon cyan
+      leftHandColor = '#ff6b6b',
+      rightHandColor = '#4ecdc4',
       lineWidth = 3,
       landmarkRadius = 5,
       mirrorMode = true  // Match mirrored video display
